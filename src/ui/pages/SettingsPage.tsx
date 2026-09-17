@@ -6,6 +6,7 @@ import { testByokConnection } from '../../llm/byok'
 import { useApp } from '../../state/store'
 import { vault } from '../../storage/vault'
 import { Disclaimer } from '../components/Common'
+import { Icon } from '../components/Icon'
 import { formatDateTime } from '../format'
 
 export function SettingsPage() {
@@ -13,6 +14,7 @@ export function SettingsPage() {
   const [showKey, setShowKey] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<string>('')
+  const [testOk, setTestOk] = useState(true)
   const [newPass, setNewPass] = useState('')
   const [confirmWipe, setConfirmWipe] = useState(false)
   const [keychainReady, setKeychainReady] = useState<boolean | null>(null)
@@ -70,12 +72,14 @@ export function SettingsPage() {
             <span className="muted small">低风险条目多为"表述模糊、建议澄清"，关闭后可以让清单更聚焦。</span>
           </span>
         </label>
-        <p className="muted small">
-          当前状态：{settings.offlineMode ? '🔒 完全离线，可断网使用' : '🌐 允许向"你指定的接口"发起 BYOK 请求'}
+        <p className="muted small row gap-sm">
+          <Icon name={settings.offlineMode ? 'lock' : 'globe'} size={14} />
+          <span>当前状态：{settings.offlineMode ? '完全离线，可断网使用' : '允许向"你指定的接口"发起 BYOK 请求'}</span>
         </p>
-        <p className="muted small">
-          本地 OCR（扫描件/图片识别）：
-          {ocrReady === null ? '检测中…' : ocrReady ? '✅ 已内置离线引擎（tesseract.js + 中文语言包）' : '⚠️ 当前环境不可用，可改用「粘贴文本」'}
+        <p className="muted small row gap-sm">
+          <Icon name={ocrReady === null ? 'clock' : ocrReady ? 'circle-check' : 'alert-triangle'} size={14} />
+          <span>本地 OCR（扫描件/图片识别）：
+          {ocrReady === null ? '检测中…' : ocrReady ? '已内置离线引擎（tesseract.js + 中文语言包）' : '当前环境不可用，可改用「粘贴文本」'}</span>
         </p>
       </section>
 
@@ -139,7 +143,8 @@ export function SettingsPage() {
               setTesting(true)
               setTestResult('正在测试…')
               const result = await testByokConnection(settings)
-              setTestResult(`${result.ok ? '✅' : '⚠️'} ${result.message}（${result.latencyMs}ms）`)
+              setTestResult(`${result.message}（${result.latencyMs}ms）`)
+              setTestOk(result.ok)
               setTesting(false)
             }}
           >
@@ -147,18 +152,24 @@ export function SettingsPage() {
           </button>
           {settings.offlineMode ? <span className="muted small">离线模式开启时无法测试。</span> : null}
         </div>
-        {testResult ? <p className="small">{testResult}</p> : null}
+        {testResult ? (
+          <p className="small row gap-sm">
+            <Icon name={testOk ? 'circle-check' : 'alert-triangle'} size={14} />
+            <span>{testResult}</span>
+          </p>
+        ) : null}
       </section>
 
       <section className="panel">
         <h2>安全</h2>
-        <p className="muted small">
-          当前保险箱：
+        <p className="muted small row gap-sm">
+          <Icon name={hasPassphrase ? 'shield-check' : keychainReady ? 'key' : 'alert-triangle'} size={14} />
+          <span>当前保险箱：
           {hasPassphrase
-            ? '🔐 已启用口令保护（PBKDF2 + AES-GCM）'
+            ? '已启用口令保护（PBKDF2 + AES-GCM）'
             : keychainReady
-              ? '🔑 无口令模式 · 主密钥由系统钥匙串保管'
-              : '⚠️ 无口令模式（密钥随库存储）'}
+              ? '无口令模式 · 主密钥由系统钥匙串保管'
+              : '无口令模式（密钥随库存储）'}</span>
         </p>
         <label className="switch-row">
           <input

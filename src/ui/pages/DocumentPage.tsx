@@ -4,6 +4,7 @@ import { CATEGORIES } from '../../core/classify'
 import type { CategoryCode, RiskFlag, Severity } from '../../core/types'
 import { useApp } from '../../state/store'
 import { CategoryTag, Disclaimer, RiskBadge } from '../components/Common'
+import { Icon } from '../components/Icon'
 import { dueText, formatBytes, formatDateTime } from '../format'
 import { navigate } from '../router'
 
@@ -52,7 +53,7 @@ export function DocumentPage({ id }: { id: string }) {
       <header className="page-head">
         <div className="row gap">
           <button type="button" className="btn btn-sm" onClick={() => navigate({ name: 'vault' })}>
-            ← 返回
+            <Icon name="arrow-left" size={15} /> 返回
           </button>
           <div>
             <h1>{doc.title}</h1>
@@ -86,7 +87,7 @@ export function DocumentPage({ id }: { id: string }) {
             title={canRunByok ? '调用你自己配置的模型做深度分析' : '需在设置中开启 BYOK 并关闭离线模式'}
             onClick={() => void runByok(doc.id)}
           >
-            🔮 BYOK 深度分析
+            <Icon name="sparkles" size={15} /> BYOK 深度分析
           </button>
         </div>
       </header>
@@ -218,7 +219,9 @@ export function DocumentPage({ id }: { id: string }) {
 
             {analysis && analysis.risks.length === 0 ? (
               <div className="empty small">
-                <div className="empty-icon">✅</div>
+                <div className="empty-icon">
+                  <Icon name="circle-check" size={22} />
+                </div>
                 <h3>本地规则库未发现明显坑点</h3>
                 <p className="muted small">可开启 BYOK 用你自己的模型做一次语义级复核（需联网，数据只发往你指定的接口）。</p>
               </div>

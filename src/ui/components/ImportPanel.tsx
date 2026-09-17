@@ -3,6 +3,7 @@ import { ocrBridge } from '../../desktop/bridge'
 import { SAMPLE_DOCS } from '../../samples'
 import { useApp } from '../../state/store'
 import { Modal } from './Common'
+import { Icon } from './Icon'
 
 type Tab = 'file' | 'paste' | 'sample'
 
@@ -64,7 +65,9 @@ export function ImportPanel({ open, onClose }: { open: boolean; onClose: () => v
           role="button"
           tabIndex={0}
         >
-          <div className="dropzone-icon">📥</div>
+          <div className="dropzone-icon">
+            <Icon name="inbox" size={26} />
+          </div>
           <div className="dropzone-title">把合同拖到这里，或点击选择文件</div>
           <p className="muted small">
             支持 PDF、DOCX、TXT/MD/CSV/JSON，以及图片（PNG/JPG 等）与扫描版 PDF。

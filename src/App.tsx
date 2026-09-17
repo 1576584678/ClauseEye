@@ -3,6 +3,7 @@ import { navigate } from './ui/router'
 import { useNotificationNavigation, useReminderNotifications } from './desktop/reminderNotifier'
 import { initUpdater, updateHeadline, updaterActions, useAutoUpdateCheck, useUpdaterState } from './desktop/updaterStore'
 import { useApp } from './state/store'
+import { Icon } from './ui/components/Icon'
 import { Sidebar } from './ui/components/Sidebar'
 import { DocumentPage } from './ui/pages/DocumentPage'
 import { LockScreen } from './ui/pages/LockScreen'
@@ -101,7 +102,9 @@ function ToastView() {
   return (
     <div className={`toast toast-${toast.kind}`} onClick={dismissToast} role="status">
       <span>{toast.text}</span>
-      <span className="toast-close">✕</span>
+      <span className="toast-close">
+        <Icon name="x" size={14} />
+      </span>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import type { DocumentRecord } from '../../core/types'
 import { adviseOffersWithByok } from '../../llm/byok'
 import { useApp } from '../../state/store'
 import { CategoryTag, Disclaimer, EmptyState, Progress } from '../components/Common'
+import { Icon } from '../components/Icon'
 import { formatRelative } from '../format'
 import { navigate } from '../router'
 
@@ -66,13 +67,17 @@ export function OfferComparePage() {
             }
           }}
         >
-          {loading ? '生成中…' : '🔮 生成模型建议'}
+          {loading ? '生成中…' : (
+            <>
+              <Icon name="sparkles" size={15} /> 生成模型建议
+            </>
+          )}
         </button>
       </header>
 
       {analyzable.length === 0 ? (
         <EmptyState
-          icon="📄"
+          icon="file-text"
           title="还没有可以对比的文档"
           description="先导入两份以上的 Offer，再回到这里进行横向对比。"
           action={
@@ -189,7 +194,7 @@ export function OfferComparePage() {
               <Disclaimer />
             </>
           ) : (
-            <EmptyState icon="⚖️" title="至少选择 2 份文档" description="勾选两份以上 Offer 后即可生成对比矩阵。" />
+            <EmptyState icon="scale" title="至少选择 2 份文档" description="勾选两份以上 Offer 后即可生成对比矩阵。" />
           )}
         </>
       )}

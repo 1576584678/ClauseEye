@@ -5,6 +5,7 @@ import type { CategoryCode } from '../../core/types'
 import { useApp } from '../../state/store'
 import { CategoryTag, EmptyState, RiskBadge, Stat } from '../components/Common'
 import { ImportPanel } from '../components/ImportPanel'
+import { Icon } from '../components/Icon'
 import { formatBytes, formatRelative } from '../format'
 import { navigate } from '../router'
 
@@ -55,7 +56,7 @@ export function VaultPage() {
             </button>
           ) : null}
           <button type="button" className="btn btn-primary" onClick={() => setImportOpen(true)}>
-            ＋ 导入文档
+            <Icon name="plus" size={16} /> 导入文档
           </button>
         </div>
       </header>
@@ -90,7 +91,7 @@ export function VaultPage() {
 
       {filtered.length === 0 ? (
         <EmptyState
-          icon="🗄"
+          icon="archive"
           title={documents.length === 0 ? '保险箱还是空的' : '没有匹配的文档'}
           description={
             documents.length === 0

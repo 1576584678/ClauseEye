@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../../state/store'
+import { Icon } from '../components/Icon'
 
 export function LockScreen() {
   const { unlockVault, hasPassphrase } = useApp()
@@ -19,7 +20,9 @@ export function LockScreen() {
     <div className="onboarding">
       <div className="onboarding-card narrow">
         <div className="brand brand-lg">
-          <div className="brand-mark">🔒</div>
+          <div className="brand-mark">
+            <Icon name="lock" size={20} />
+          </div>
           <div>
             <div className="brand-name">保险箱已锁定</div>
             <div className="brand-sub">{hasPassphrase ? '输入口令以解密本地数据' : '本机加密数据已就绪'}</div>

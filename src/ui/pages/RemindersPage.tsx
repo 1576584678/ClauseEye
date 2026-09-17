@@ -75,7 +75,7 @@ export function RemindersPage() {
           </div>
         </header>
         <EmptyState
-          icon="⏰"
+          icon="clock"
           title="暂无可提醒的日期"
           description="导入劳动合同、租房合同或鉴定文书后，这里会自动整理出关键时间点。"
           action={
