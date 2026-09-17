@@ -21,13 +21,12 @@
 
 | 文件 | 说明 |
 |---|---|
-| `ClauseEye-0.2.1-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
-| `ClauseEye-0.2.1-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
+| `ClauseEye-0.3.0-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
+| `ClauseEye-0.3.0-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
 | `ClauseEye-green-win-x64.zip` | 绿色版目录，解压后双击 `ClauseEye.exe`。若单文件版被 Windows 11「智能应用控制」拦截，请改用这个 |
 
-当前版本 **0.2.1**（V1 的补丁版：修复安装版自动更新形态检测，让「发现新版本」能真正走到一键更新）。
+当前版本 **0.3.0**（界面改版：统一 SVG 图标体系与深色设计 token，补齐可见焦点与 reduced-motion 支持）。
 
-数据默认存放在 `%APPDATA%\ClauseEye\`，全部本地加密。
 数据默认存放在 `%APPDATA%\ClauseEye\`，全部本地加密。
 
 装好之后不用再管更新：**安装版**启动 20 秒后会自动检查新版本，发现更新会在应用顶部弹出横幅，点一下就能下载并重启安装；也可以随时在「设置 → 软件更新」里手动检查。**便携版 / 绿色版**无法自我替换文件，会弹系统通知提示你到本页下载新版本。
@@ -155,7 +154,7 @@ npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、IndexedDB、资
 
 ```bash
 git push origin main
-git tag v0.2.1 && git push origin v0.2.1   # 打 tag 即自动触发构建与发布
+git tag v0.3.0 && git push origin v0.3.0   # 打 tag 即自动触发构建与发布
 ```
 
 `.github/workflows/release.yml` 在 tag 推送后自动完成：类型检查 + 单测 → 打包安装版 / 便携版 / 绿色版 → 上传 `setup.exe`、`portable.exe`、`latest.yml`、`*.blockmap` → 创建或更新 Release（写入发布说明，并自动清理同一 tag 上重复的 Release 条目）。

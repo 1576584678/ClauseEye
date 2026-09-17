@@ -8,7 +8,7 @@
  *  - 这里用 fetch 直接调 API，失败信息可以原样打印出来。
  *
  * 用法：
- *   node scripts/publish-release.mjs --tag v0.2.1 [--dir release] [--dry-run]
+ *   node scripts/publish-release.mjs --tag v0.3.0 [--dir release] [--dry-run]
  * 环境变量：GITHUB_TOKEN（或 GH_TOKEN）、GITHUB_REPOSITORY（owner/repo）、GITHUB_REF_NAME
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
