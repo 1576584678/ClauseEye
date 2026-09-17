@@ -31,6 +31,15 @@ jobs:
           node-version: 22
           cache: npm
 
+      # 缓存 electron / nsis / winCodeSign，避免重复下载造成的偶发失败
+      - name: 缓存 electron-builder 工具链
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: eb-cache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: 安装依赖
         run: npm ci --no-audit --no-fund
 
@@ -49,30 +58,36 @@ jobs:
       - name: 前端生产构建
         run: npm run build
 
+      # 这里只构建、不发布：产物统一由最后一步用 gh 上传。
+      # 原因：electron-builder 的 publisher 会在构建过程中逐个上传，
+      # 一旦中途失败就会留下「只有 blockmap、没有 exe」的残缺 Release。
       - name: 打包安装版 + 便携版（安装版支持自动更新）
         id: build_all
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then PUBLISH=always; else PUBLISH=never; fi
-          npx electron-builder --win --config.npmRebuild=false --publish "$PUBLISH"
+        continue-on-error: true
+        run: npx electron-builder --win --config.npmRebuild=false --publish never
 
-      # 兜底：NSIS 环节偶发失败（例如运行器策略拦截自解压、临时文件占用）时，
-      # 至少保证便携版能发布出去，不让整次发布落空。
-      - name: 兜底：仅打包便携版
+      # 偶发的 NSIS 失败（自解压/解压器被拦截、临时文件占用）重试一次
+      - name: 重试打包
+        id: build_retry
         if: steps.build_all.outcome == 'failure'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+        run: |
+          echo "::warning::首次打包失败，重试一次"
+          npx electron-builder --win --config.npmRebuild=false --publish never
+
+      # 仍然失败：至少保证便携版能发布出去，不让整次发布落空
+      - name: 兜底：仅打包便携版
+        id: build_portable
+        if: steps.build_all.outcome == 'failure' && steps.build_retry.outcome == 'failure'
+        continue-on-error: true
         run: |
           echo "::warning::安装版打包失败，降级为仅发布便携版"
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then PUBLISH=always; else PUBLISH=never; fi
-          npx electron-builder --win --config.npmRebuild=false --config.win.target=portable --publish "$PUBLISH"
+          npx electron-builder --win --config.npmRebuild=false --config.win.target=portable --publish never
 
       # 绿色版只是「便携版被系统策略拦截时」的兜底方案，失败不应影响正式产物发布
       - name: 构建绿色版目录（兜底方案，允许失败）
         id: green
+        if: always()
         continue-on-error: true
         run: node scripts/build-green.mjs
 
@@ -85,6 +100,7 @@ jobs:
           Compress-Archive -Path 'release/ClauseEye-green' -DestinationPath $zip -CompressionLevel Optimal
 
       - name: 上传构建产物
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ClauseEye-windows
@@ -96,16 +112,15 @@ jobs:
             release/*.blockmap
           retention-days: 30
 
-      # 同一个 tag 上若同时存在 electron-builder 自动创建的 Release 与 gh 创建的 Release，
-      # Releases 页面会出现两个同名条目（资产还各缺一半）。这里只保留资产最全的那条。
+      # 同一个 tag 上若残留重复的 Release（资产还各缺一半），只保留资产最全的那条
       - name: 清理重复的 Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: always() && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/dedupe-releases.mjs --apply
 
       - name: 创建 / 更新 Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: always() && startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -151,14 +166,49 @@ jobs:
           for f in release/*.exe release/*.zip release/*.yml release/*.blockmap; do
             if [ -e "$f" ]; then assets+=("$f"); fi
           done
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "::error::release/ 下没有任何可发布的产物"
+            exit 1
+          fi
+
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            # electron-builder 已经建好了 Release，这里补上说明并确保资产齐全
             gh release edit "${GITHUB_REF_NAME}" --title "ClauseEye ${GITHUB_REF_NAME}" --notes "$NOTES" --latest
-            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
           else
-            gh release create "${GITHUB_REF_NAME}" "${assets[@]}" \
+            gh release create "${GITHUB_REF_NAME}" \
               --title "ClauseEye ${GITHUB_REF_NAME}" \
               --notes "$NOTES" \
               ${{ inputs.draft && '--draft' || '' }}
           fi
+
+          # 大文件上传偶发中断，重试三次
+          attempt=1
+          while [ "$attempt" -le 3 ]; do
+            if gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber; then
+              break
+            fi
+            echo "::warning::第 ${attempt} 次上传 Release 资产失败"
+            attempt=$((attempt + 1))
+            sleep 10
+          done
+          if [ "$attempt" -gt 3 ]; then
+            echo "::error::Release 资产上传失败"
+            exit 1
+          fi
+
           echo "Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
+
+      # 兜底校验：打包全挂时上面的步骤也能跑完，这里显式失败，避免「绿着但没产物」
+      - name: 校验发布产物
+        if: always() && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          count=$(ls release/*.exe 2>/dev/null | wc -l)
+          installers=$(ls release/*setup.exe 2>/dev/null | wc -l)
+          echo "exe 产物数量：${count}（其中安装版 ${installers} 个）"
+          if [ "${count}" -eq 0 ]; then
+            echo "::error::没有任何 exe 产物，本次发布失败"
+            exit 1
+          fi
+          if [ "${installers}" -eq 0 ]; then
+            echo "::warning::本次没有安装版（因此自动更新不可用），只有免安装产物"
+          fi
