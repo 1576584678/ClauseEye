@@ -1,0 +1,124 @@
+name: Build & Release (Windows)
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: '发布为草稿'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: 构建 Windows 免安装版
+    runs-on: windows-latest
+    env:
+      # electron-builder 需要下载 electron / nsis / winCodeSign，CI 直连 GitHub 即可
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci --no-audit --no-fund
+
+      - name: 校验（类型检查 + 单测）
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: 下载离线 OCR 语言包
+        run: npm run tessdata
+        continue-on-error: true
+
+      - name: 生成图标
+        run: npm run icon
+
+      - name: 前端生产构建
+        run: npm run build
+
+      - name: 打包安装版 + 便携版（安装版支持自动更新）
+        id: build_all
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then PUBLISH=always; else PUBLISH=never; fi
+          npx electron-builder --win --config.npmRebuild=false --publish "$PUBLISH"
+
+      # 兜底：NSIS 环节偶发失败（例如运行器策略拦截自解压、临时文件占用）时，
+      # 至少保证便携版能发布出去，不让整次发布落空。
+      - name: 兜底：仅打包便携版
+        if: steps.build_all.outcome == 'failure'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "::warning::安装版打包失败，降级为仅发布便携版"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then PUBLISH=always; else PUBLISH=never; fi
+          npx electron-builder --win --config.npmRebuild=false --config.win.target=portable --publish "$PUBLISH"
+
+      - name: 构建绿色版目录（绕过智能应用控制的兜底方案）
+        run: node scripts/build-green.mjs
+
+      - name: 压缩绿色版
+        shell: pwsh
+        run: |
+          $zip = 'release/ClauseEye-green-win-x64.zip'
+          if (Test-Path $zip) { Remove-Item -LiteralPath $zip -Force }
+          Compress-Archive -Path 'release/ClauseEye-green' -DestinationPath $zip -CompressionLevel Optimal
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClauseEye-windows
+          path: |
+            release/*.exe
+            release/*.zip
+            release/*.yml
+            release/*.blockmap
+          retention-days: 30
+
+      - name: 创建 / 更新 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES=$(cat <<'EOF'
+          ## ClauseEye · 契眼（Windows 免安装版）
+
+          下载后**双击即可运行**，不需要安装 Node.js 或任何其它依赖。
+
+          | 文件 | 说明 |
+          |---|---|
+          | `ClauseEye-*-win-x64-setup.exe` | 安装版（**推荐**）。安装后可在应用内一键自动更新，后续版本无需手动下载 |
+          | `ClauseEye-*-portable.exe` | 单文件便携版，双击直接运行；免安装版无法自我更新，新版本会提示你到本页面下载 |
+          | `ClauseEye-green-win-x64.zip` | 绿色版目录，解压后双击 `ClauseEye.exe`。如果单文件版提示「应用程序控制策略已阻止此文件」（Windows 11 智能应用控制），请改用这个 |
+          | `latest.yml` / `*.blockmap` | 自动更新所需的元数据，**不要删除**（应用靠它判断是否有新版本） |
+
+          **更新机制**：安装版启动 20 秒后（或打开设置页点「检查更新」）会读取本页的 `latest.yml` 判断版本，
+          发现新版本可一键下载并重启安装；便携版只做提示，不自动替换文件。
+
+          **V1 新增**：150 条中国法规则库（劳动/租房/Offer/离职/工伤/NDA/服务协议）、系统级到期提醒、系统钥匙串保护主密钥、离线 OCR（扫描件与图片识别，语言包随包分发）。
+
+          数据默认存放在 `%APPDATA%\ClauseEye\`，全部本地加密，应用不连接任何自建服务。
+          EOF
+          )
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" release/*.exe release/*.zip release/*.yml release/*.blockmap --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" release/*.exe release/*.zip release/*.yml release/*.blockmap \
+              --title "ClauseEye ${GITHUB_REF_NAME}" \
+              --notes "$NOTES" \
+              ${{ inputs.draft && '--draft' || '' }}
+          fi

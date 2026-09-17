@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.vite/
+*.local
+.DS_Store
+coverage/
+release/
+
+# OCR 语言包（由 npm run tessdata 下载，不入库：约 6.5 MB）
+public/tessdata/
+
+
+# tesseract.js 运行时缓存（不应出现在仓库里）
+*.traineddata
+build.log
+
