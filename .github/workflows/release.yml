@@ -108,7 +108,19 @@ jobs:
         id: green
         if: matrix.slug == 'windows'
         continue-on-error: true
-        run: node scripts/build-green.mjs
+        shell: pwsh
+        run: |
+          # 失败时重试一次：绿色版目录是「便携版被系统策略拦截」时的兜底方案，偶发占用/杀软扫描会导致失败
+          for ($i = 1; $i -le 2; $i++) {
+            node scripts/build-green.mjs 2>&1 | Tee-Object -FilePath green-build.log
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "::warning::绿色版构建第 $i 次失败（exit $LASTEXITCODE）"
+            Start-Sleep -Seconds 5
+          }
+          # 把日志尾部作为注解上报（注解可通过 API 读取，方便定位失败原因）
+          $tail = (Get-Content green-build.log -Tail 20 -ErrorAction SilentlyContinue) -join '%0A'
+          Write-Host "::error::绿色版构建失败：$tail"
+          exit 1
 
       - name: 压缩绿色版
         if: matrix.slug == 'windows' && steps.green.outcome == 'success'
