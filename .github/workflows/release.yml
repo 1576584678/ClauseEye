@@ -4,11 +4,6 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      draft:
-        description: '发布为草稿'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -58,7 +53,7 @@ jobs:
       - name: 前端生产构建
         run: npm run build
 
-      # 这里只构建、不发布：产物统一由最后一步用 gh 上传。
+      # 这里只构建、不发布：产物统一由最后一步用 Node 调 API 上传。
       # 原因：electron-builder 的 publisher 会在构建过程中逐个上传，
       # 一旦中途失败就会留下「只有 blockmap、没有 exe」的残缺 Release。
       - name: 打包安装版 + 便携版（安装版支持自动更新）
@@ -119,96 +114,25 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/dedupe-releases.mjs --apply
 
-      - name: 创建 / 更新 Release
+      # 发布：用 Node 直接调 GitHub REST API（不依赖 runner 上的 gh CLI，失败信息可直接看到）
+      - name: 创建 / 更新 Release 并上传产物
         if: always() && startsWith(github.ref, 'refs/tags/v')
-        shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          NOTES=$(cat <<'EOF'
-          ## ClauseEye · 契眼（Windows 免安装版）
-
-          下载后**双击即可运行**，不需要安装 Node.js 或任何其它依赖。
-
-          | 文件 | 说明 |
-          |---|---|
-          | `ClauseEye-*-win-x64-setup.exe` | 安装版（**推荐**）。安装后可在应用内一键自动更新，后续版本无需手动下载 |
-          | `ClauseEye-*-portable.exe` | 单文件便携版，双击直接运行；免安装版无法自我更新，新版本会提示你到本页面下载 |
-          | `ClauseEye-green-win-x64.zip` | 绿色版目录，解压后双击 `ClauseEye.exe`。如果单文件版提示「应用程序控制策略已阻止此文件」（Windows 11 智能应用控制），请改用这个 |
-          | `latest.yml` / `*.blockmap` | 自动更新所需的元数据，**不要删除**（应用靠它判断是否有新版本） |
-
-          **更新机制**：安装版启动 20 秒后（或打开设置页点「检查更新」）会读取本页的 `latest.yml` 判断版本，
-          发现新版本会弹系统通知并在应用顶部提示，可一键下载并重启安装；便携版 / 绿色版只做提示，不自动替换文件。
-
-          **V1 内容**：150 条中国法规则库（劳动/租房/Offer/离职/工伤/NDA/服务协议）、系统级到期提醒、系统钥匙串保护主密钥、离线 OCR（扫描件与图片识别，语言包随包分发）。
-
-          数据默认存放在 `%APPDATA%\ClauseEye\`，全部本地加密，应用不连接任何自建服务。
-          EOF
-          )
-
-          # 自动附上「上一个 tag → 当前 tag」的提交列表，省去手写发布说明
-          PREV_TAG=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
-          if [ -n "${PREV_TAG}" ]; then
-            CHANGES=$(git log --no-merges --pretty='- %s' "${PREV_TAG}..${GITHUB_REF_NAME}")
-          else
-            CHANGES=$(git log --no-merges --pretty='- %s' -20 "${GITHUB_REF_NAME}")
-          fi
-          if [ -n "${CHANGES}" ]; then
-            NOTES="${NOTES}
-
-          ### 本次更新
-
-          ${CHANGES}"
-          fi
-
-          # 只提交实际存在的产物，避免绿色版构建失败时 gh 因通配符无匹配而报错
-          assets=()
-          for f in release/*.exe release/*.zip release/*.yml release/*.blockmap; do
-            if [ -e "$f" ]; then assets+=("$f"); fi
-          done
-          if [ ${#assets[@]} -eq 0 ]; then
-            echo "::error::release/ 下没有任何可发布的产物"
-            exit 1
-          fi
-
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release edit "${GITHUB_REF_NAME}" --title "ClauseEye ${GITHUB_REF_NAME}" --notes "$NOTES" --latest
-          else
-            gh release create "${GITHUB_REF_NAME}" \
-              --title "ClauseEye ${GITHUB_REF_NAME}" \
-              --notes "$NOTES" \
-              ${{ inputs.draft && '--draft' || '' }}
-          fi
-
-          # 大文件上传偶发中断，重试三次
-          attempt=1
-          while [ "$attempt" -le 3 ]; do
-            if gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber; then
-              break
-            fi
-            echo "::warning::第 ${attempt} 次上传 Release 资产失败"
-            attempt=$((attempt + 1))
-            sleep 10
-          done
-          if [ "$attempt" -gt 3 ]; then
-            echo "::error::Release 资产上传失败"
-            exit 1
-          fi
-
-          echo "Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/publish-release.mjs --dir release
 
       # 兜底校验：打包全挂时上面的步骤也能跑完，这里显式失败，避免「绿着但没产物」
       - name: 校验发布产物
         if: always() && startsWith(github.ref, 'refs/tags/v')
-        shell: bash
+        shell: pwsh
         run: |
-          count=$(ls release/*.exe 2>/dev/null | wc -l)
-          installers=$(ls release/*setup.exe 2>/dev/null | wc -l)
-          echo "exe 产物数量：${count}（其中安装版 ${installers} 个）"
-          if [ "${count}" -eq 0 ]; then
-            echo "::error::没有任何 exe 产物，本次发布失败"
+          $exes = @(Get-ChildItem -Path release -Filter *.exe -ErrorAction SilentlyContinue)
+          $installers = @($exes | Where-Object { $_.Name -like '*setup.exe' -and $_.Length -gt 30MB })
+          Write-Host "exe 产物：$($exes.Count) 个（其中可用安装版 $($installers.Count) 个）"
+          if ($exes.Count -eq 0) {
+            Write-Host "::error::没有任何 exe 产物，本次发布失败"
             exit 1
-          fi
-          if [ "${installers}" -eq 0 ]; then
-            echo "::warning::本次没有安装版（因此自动更新不可用），只有免安装产物"
-          fi
+          }
+          if ($installers.Count -eq 0) {
+            Write-Host "::warning::本次没有可用的安装版（自动更新不可用），只有免安装产物"
+          }

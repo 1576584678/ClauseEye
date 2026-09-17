@@ -20,6 +20,7 @@
     "dist:green": "npm run build && node scripts/build-green.mjs",
     "tessdata": "node scripts/fetch-tessdata.mjs",
     "dedupe:releases": "node scripts/dedupe-releases.mjs",
+    "publish:release": "node scripts/publish-release.mjs",
     "benchmark": "vitest run src/core/tests/benchmark.test.ts --reporter=verbose",
     "build:release": "npm run tessdata && npm run build"
   },
