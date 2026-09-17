@@ -18,20 +18,32 @@ const names = (dir: string, options?: { minInstallerBytes?: number }): string[] 
   selectAssets(dir, options).map((item: { name: string }) => item.name)
 
 describe('发布产物筛选', () => {
-  it('只带上 exe / yml / blockmap，忽略中间文件与无关文件', () => {
+  it('只带上各平台产物（exe / dmg / AppImage / deb / zip / yml / blockmap），忽略中间文件与无关文件', () => {
     withTempDir((dir) => {
       writeFileSync(join(dir, 'ClauseEye-0.3.0-win-x64-setup.exe'), 'x'.repeat(64))
       writeFileSync(join(dir, 'ClauseEye-0.3.0-win-x64-portable.exe'), 'x'.repeat(64))
       writeFileSync(join(dir, 'ClauseEye-green-win-x64.zip'), 'x'.repeat(8))
       writeFileSync(join(dir, 'latest.yml'), 'version: 0.3.0\n')
       writeFileSync(join(dir, 'ClauseEye-0.3.0-win-x64-setup.exe.blockmap'), 'x'.repeat(4))
+      writeFileSync(join(dir, 'ClauseEye-0.3.0-mac-arm64.dmg'), 'x'.repeat(64))
+      writeFileSync(join(dir, 'ClauseEye-0.3.0-mac-arm64.dmg.blockmap'), 'x'.repeat(4))
+      writeFileSync(join(dir, 'ClauseEye-0.3.0-mac-arm64.zip'), 'x'.repeat(64))
+      writeFileSync(join(dir, 'ClauseEye-0.3.0-linux-x64.AppImage'), 'x'.repeat(64))
+      writeFileSync(join(dir, 'ClauseEye-0.3.0-linux-x64.deb'), 'x'.repeat(64))
+      writeFileSync(join(dir, 'latest-mac.yml'), 'version: 0.3.0\n')
       writeFileSync(join(dir, 'builder-debug.yml'), 'debug: true\n')
       writeFileSync(join(dir, '使用说明.txt'), 'hi\n')
       expect(names(dir, { minInstallerBytes: 1 })).toEqual([
+        'ClauseEye-0.3.0-linux-x64.AppImage',
+        'ClauseEye-0.3.0-linux-x64.deb',
+        'ClauseEye-0.3.0-mac-arm64.dmg',
+        'ClauseEye-0.3.0-mac-arm64.dmg.blockmap',
+        'ClauseEye-0.3.0-mac-arm64.zip',
         'ClauseEye-0.3.0-win-x64-portable.exe',
         'ClauseEye-0.3.0-win-x64-setup.exe',
         'ClauseEye-0.3.0-win-x64-setup.exe.blockmap',
         'ClauseEye-green-win-x64.zip',
+        'latest-mac.yml',
         'latest.yml',
       ])
     })

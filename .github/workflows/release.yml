@@ -1,4 +1,4 @@
-name: Build & Release (Windows)
+name: Build & Release
 
 on:
   push:
@@ -9,11 +9,37 @@ permissions:
   contents: write
 
 jobs:
-  windows:
-    name: 构建 Windows 免安装版
-    runs-on: windows-latest
+  # 三个平台并行构建，各自只构建、不发布（避免多个 job 同时创建同一个 Release）
+  build:
+    name: 构建 ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slug: windows
+            label: Windows
+            os: windows-latest
+            eb: --win
+            cache: |
+              ~\AppData\Local\electron\Cache
+              ~\AppData\Local\electron-builder\Cache
+          - slug: macos
+            label: macOS
+            os: macos-latest
+            eb: --mac
+            cache: |
+              ~/Library/Caches/electron
+              ~/Library/Caches/electron-builder
+          - slug: linux
+            label: Linux
+            os: ubuntu-latest
+            eb: --linux
+            cache: |
+              ~/.cache/electron
+              ~/.cache/electron-builder
     env:
-      # electron-builder 需要下载 electron / nsis / winCodeSign，CI 直连 GitHub 即可
+      # 没有代码签名证书：macOS 走 ad-hoc 签名，Windows 不签名
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       # fetch-depth: 0 —— 自动生成「本次更新」需要能读到上一个 tag 到当前 tag 的提交
@@ -26,13 +52,11 @@ jobs:
           node-version: 22
           cache: npm
 
-      # 缓存 electron / nsis / winCodeSign，避免重复下载造成的偶发失败
+      # 缓存 electron / nsis / winCodeSign / dmg 等工具链，避免重复下载造成的偶发失败
       - name: 缓存 electron-builder 工具链
         uses: actions/cache@v4
         with:
-          path: |
-            ~\AppData\Local\electron\Cache
-            ~\AppData\Local\electron-builder\Cache
+          path: ${{ matrix.cache }}
           key: eb-cache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: 安装依赖
@@ -53,41 +77,41 @@ jobs:
       - name: 前端生产构建
         run: npm run build
 
-      # 这里只构建、不发布：产物统一由最后一步用 Node 调 API 上传。
+      # 这里只构建、不发布：产物统一由 release job 用 Node 调 API 上传。
       # 原因：electron-builder 的 publisher 会在构建过程中逐个上传，
       # 一旦中途失败就会留下「只有 blockmap、没有 exe」的残缺 Release。
-      - name: 打包安装版 + 便携版（安装版支持自动更新）
+      - name: 打包（${{ matrix.label }}）
         id: build_all
         continue-on-error: true
-        run: npx electron-builder --win --config.npmRebuild=false --publish never
+        run: npx electron-builder ${{ matrix.eb }} --config.npmRebuild=false --publish never
 
-      # 偶发的 NSIS 失败（自解压/解压器被拦截、临时文件占用）重试一次
-      - name: 重试打包
+      # Windows 专用的偶发失败（NSIS 自解压器被拦截、临时文件占用）重试一次
+      - name: 重试打包（Windows）
         id: build_retry
-        if: steps.build_all.outcome == 'failure'
+        if: matrix.slug == 'windows' && steps.build_all.outcome == 'failure'
         continue-on-error: true
         run: |
           echo "::warning::首次打包失败，重试一次"
           npx electron-builder --win --config.npmRebuild=false --publish never
 
       # 仍然失败：至少保证便携版能发布出去，不让整次发布落空
-      - name: 兜底：仅打包便携版
+      - name: 兜底：仅打包便携版（Windows）
         id: build_portable
-        if: steps.build_all.outcome == 'failure' && steps.build_retry.outcome == 'failure'
+        if: matrix.slug == 'windows' && steps.build_all.outcome == 'failure' && steps.build_retry.outcome == 'failure'
         continue-on-error: true
         run: |
           echo "::warning::安装版打包失败，降级为仅发布便携版"
           npx electron-builder --win --config.npmRebuild=false --config.win.target=portable --publish never
 
       # 绿色版只是「便携版被系统策略拦截时」的兜底方案，失败不应影响正式产物发布
-      - name: 构建绿色版目录（兜底方案，允许失败）
+      - name: 构建绿色版目录（Windows 兜底方案，允许失败）
         id: green
-        if: always()
+        if: matrix.slug == 'windows'
         continue-on-error: true
         run: node scripts/build-green.mjs
 
       - name: 压缩绿色版
-        if: steps.green.outcome == 'success'
+        if: matrix.slug == 'windows' && steps.green.outcome == 'success'
         shell: pwsh
         run: |
           $zip = 'release/ClauseEye-green-win-x64.zip'
@@ -98,41 +122,62 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ClauseEye-windows
+          name: ClauseEye-${{ matrix.slug }}
           if-no-files-found: warn
           path: |
             release/*.exe
             release/*.zip
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
             release/*.yml
             release/*.blockmap
           retention-days: 30
 
+      # 兜底校验：打包全挂时上面的步骤也能跑完，这里显式失败，避免「绿着但没产物」
+      - name: 校验本平台产物
+        if: always()
+        run: node scripts/verify-artifacts.mjs --platform ${{ matrix.slug }} --dir release
+
+  # 汇总三个平台的产物，一次性发布，最后再校验一遍
+  release:
+    name: 发布到 GitHub Releases
+    needs: build
+    # 手动（workflow_dispatch）跑时只构建、不发布，方便先验证多平台链路
+    if: always() && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 汇总各平台产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ClauseEye-*
+          path: release
+          merge-multiple: true
+
+      - name: 产物为空则中止（避免发出空 Release）
+        run: |
+          node -e "const fs=require('node:fs');const n=fs.existsSync('release')?fs.readdirSync('release').length:0;console.log('产物数量：'+n);if(!n){console.log('::error::没有任何产物，跳过发布');process.exit(1)}"
+
       # 同一个 tag 上若残留重复的 Release（资产还各缺一半），只保留资产最全的那条
       - name: 清理重复的 Release
-        if: always() && startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/dedupe-releases.mjs --apply
 
       # 发布：用 Node 直接调 GitHub REST API（不依赖 runner 上的 gh CLI，失败信息可直接看到）
       - name: 创建 / 更新 Release 并上传产物
-        if: always() && startsWith(github.ref, 'refs/tags/v')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/publish-release.mjs --dir release
 
-      # 兜底校验：打包全挂时上面的步骤也能跑完，这里显式失败，避免「绿着但没产物」
       - name: 校验发布产物
-        if: always() && startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
-        run: |
-          $exes = @(Get-ChildItem -Path release -Filter *.exe -ErrorAction SilentlyContinue)
-          $installers = @($exes | Where-Object { $_.Name -like '*setup.exe' -and $_.Length -gt 30MB })
-          Write-Host "exe 产物：$($exes.Count) 个（其中可用安装版 $($installers.Count) 个）"
-          if ($exes.Count -eq 0) {
-            Write-Host "::error::没有任何 exe 产物，本次发布失败"
-            exit 1
-          }
-          if ($installers.Count -eq 0) {
-            Write-Host "::warning::本次没有可用的安装版（自动更新不可用），只有免安装产物"
-          }
+        run: node scripts/verify-artifacts.mjs --platform all --dir release

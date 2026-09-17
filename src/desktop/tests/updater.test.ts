@@ -7,14 +7,18 @@ import { describe, expect, it } from 'vitest'
 
 const requireCjs = createRequire(import.meta.url)
 const updaterPath = fileURLToPath(new URL('../../../electron/updater.cjs', import.meta.url))
-const { compareVersions, detectUpdaterMode, hasUpdateMetadata } = requireCjs(updaterPath) as {
+const { compareVersions, detectUpdaterMode, hasUpdateMetadata, portableReasonMessage } = requireCjs(
+  updaterPath,
+) as {
   compareVersions: (a: string, b: string) => number
   hasUpdateMetadata: (resourcesPath?: string) => boolean
   detectUpdaterMode: (input: {
     isPackaged: boolean
     env?: Record<string, string | undefined>
     hasUpdateMetadata?: boolean
+    platform?: string
   }) => string
+  portableReasonMessage: (platform?: string) => string
 }
 
 describe('版本比较（更新判定）', () => {
@@ -57,6 +61,26 @@ describe('更新形态判定', () => {
       'portable',
     )
     expect(detectUpdaterMode({ isPackaged: true, env: { PORTABLE_EXECUTABLE_FILE: 'C:\\x\\a.exe' } })).toBe('portable')
+  })
+
+  it('macOS 未签名构建降级为手动更新（Squirrel.Mac 要求签名）', () => {
+    expect(
+      detectUpdaterMode({ isPackaged: true, env: {}, hasUpdateMetadata: true, platform: 'darwin' }),
+    ).toBe('portable')
+  })
+
+  it('Windows / Linux 有更新元数据时仍走自动更新', () => {
+    expect(detectUpdaterMode({ isPackaged: true, env: {}, hasUpdateMetadata: true, platform: 'win32' })).toBe(
+      'installer',
+    )
+    expect(detectUpdaterMode({ isPackaged: true, env: {}, hasUpdateMetadata: true, platform: 'linux' })).toBe(
+      'installer',
+    )
+  })
+
+  it('免安装提示语戍区分 macOS 与 Windows', () => {
+    expect(portableReasonMessage('darwin')).toContain('macOS')
+    expect(portableReasonMessage('win32')).toContain('免安装')
   })
 })
 

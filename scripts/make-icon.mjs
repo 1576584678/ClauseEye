@@ -2,14 +2,21 @@
  * 生成应用图标（不依赖任何图形库）：build/icon.png + build/icon.ico
  * 图形语义：「契眼」— 一只看向合同的眼睛。
  * 用法：node scripts/make-icon.mjs
+ *
+ * 尺寸说明：
+ *  - Windows 用 icon.ico（内嵌 256px PNG）
+ *  - macOS / Linux 用 icon.png，electron-builder 要求 ≥512px 才能转成 .icns / 多尺寸图标，
+ *    所以基准图形是「256 设计稿 + 可缩放渲染」，默认输出 1024px。
  */
 import zlib from 'node:zlib'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const SIZE = 256
-const SS = 3 // 每个像素 3x3 子采样做抗锯齿
+/** 设计基准尺寸：所有坐标常量都按这个尺寸写的 */
+const REF = 256
+const PNG_SIZE = 1024
+const ICO_SIZE = 256
 
 const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'build')
 
@@ -31,75 +38,89 @@ const IRIS_OUTER = hex('#3b82f6')
 const IRIS_INNER = hex('#22d3ee')
 const PUPIL = hex('#060c18')
 
+/* 以下均为 256×256 设计稿坐标 */
 const RADIUS = 58
-const CX = SIZE / 2
 const EYE_CY = 132
 const EYE_HALF_W = 86
 const EYE_HALF_H = 62
 const IRIS_R = 40
 const PUPIL_R = 17
+const STROKE = 6
+const HL_DX = 13
+const HL_DY = 15
+const HL_R = 10
 
-function roundedRectCoverage(x, y) {
-  const half = SIZE / 2
-  const dx = Math.max(Math.abs(x - half) - (half - RADIUS), 0)
-  const dy = Math.max(Math.abs(y - half) - (half - RADIUS), 0)
-  return Math.hypot(dx, dy) <= RADIUS ? 1 : 0
-}
+/** 按目标尺寸生成取样函数（坐标落在 size×size 画布上） */
+function makeSampler(size) {
+  const k = size / REF
+  const cx = size / 2
+  const half = size / 2
+  const radius = RADIUS * k
+  const eyeCy = EYE_CY * k
+  const eyeHalfW = EYE_HALF_W * k
+  const eyeHalfH = EYE_HALF_H * k
+  const irisR = IRIS_R * k
+  const pupilR = PUPIL_R * k
+  const stroke = STROKE * k
+  const gradTop = 26 * k
+  const gradSpan = (REF - 52) * k
+  const hlX = cx - HL_DX * k
+  const hlY = eyeCy - HL_DY * k
+  const hlR = HL_R * k
 
-/** 杏仁形眼睛的归一化纵向半高（0~1），u 为 0~1 的横向位置 */
-function eyeProfile(u) {
-  if (u <= 0 || u >= 1) return 0
-  return Math.pow(Math.sin(Math.PI * u), 0.82)
-}
-
-function insideEye(x, y, inflate = 0) {
-  const u = (x - (CX - EYE_HALF_W)) / (2 * EYE_HALF_W)
-  if (u <= 0 || u >= 1) return false
-  const halfH = EYE_HALF_H * eyeProfile(u) + inflate
-  return Math.abs(y - EYE_CY) <= halfH
-}
-
-/** 取某点的颜色（含渐变与形状叠加），返回 [r,g,b,a] */
-function sample(x, y) {
-  if (!roundedRectCoverage(x, y)) return [0, 0, 0, 0]
-
-  // 底：上深蓝 → 下近黑
-  let color = mix(BG_TOP, BG_BOTTOM, clamp01((y - 26) / (SIZE - 52)))
-
-  const inside = insideEye(x, y, 0)
-  const insideStroke = insideEye(x, y, 6)
-
-  if (insideStroke && !inside) {
-    // 眼睛外描边
-    color = mix(color, IRIS_OUTER, 0.85)
-  } else if (inside) {
-    // 眼白：上亮下略暗，做出球面感
-    const t = clamp01((y - (EYE_CY - EYE_HALF_H)) / (2 * EYE_HALF_H))
-    color = mix(EYE_LIGHT, EYE_DIM, t * 0.75)
-
-    const d = Math.hypot(x - CX, y - EYE_CY)
-    if (d <= IRIS_R) {
-      // 虹膜：蓝 → 青
-      const tIris = clamp01((x - (CX - IRIS_R)) / (2 * IRIS_R))
-      color = mix(IRIS_OUTER, IRIS_INNER, tIris)
-      if (d <= PUPIL_R) color = PUPIL
-    }
-
-    // 高光
-    const dh = Math.hypot(x - (CX - 13), y - (EYE_CY - 15))
-    if (dh <= 10) color = mix(color, [255, 255, 255], 0.8)
+  /** 杏仁形眼睛的归一化纵向半高（0~1），u 为 0~1 的横向位置 */
+  const insideEye = (x, y, inflate = 0) => {
+    const u = (x - (cx - eyeHalfW)) / (2 * eyeHalfW)
+    if (u <= 0 || u >= 1) return false
+    const halfH = eyeHalfH * Math.pow(Math.sin(Math.PI * u), 0.82) + inflate
+    return Math.abs(y - eyeCy) <= halfH
   }
 
-  return [color[0], color[1], color[2], 255]
+  return (x, y) => {
+    // 圆角方形底：四角用半径 radius 的圆弧裁掉
+    const dx = Math.max(Math.abs(x - half) - (half - radius), 0)
+    const dy = Math.max(Math.abs(y - half) - (half - radius), 0)
+    if (Math.hypot(dx, dy) > radius) return [0, 0, 0, 0]
+
+    // 底：上深蓝 → 下近黑
+    let color = mix(BG_TOP, BG_BOTTOM, clamp01((y - gradTop) / gradSpan))
+
+    const inside = insideEye(x, y, 0)
+    const insideStroke = insideEye(x, y, stroke)
+
+    if (insideStroke && !inside) {
+      // 眼睛外描边
+      color = mix(color, IRIS_OUTER, 0.85)
+    } else if (inside) {
+      // 眼白：上亮下略暗，做出球面感
+      const t = clamp01((y - (eyeCy - eyeHalfH)) / (2 * eyeHalfH))
+      color = mix(EYE_LIGHT, EYE_DIM, t * 0.75)
+
+      const d = Math.hypot(x - cx, y - eyeCy)
+      if (d <= irisR) {
+        // 虹膜：蓝 → 青
+        const tIris = clamp01((x - (cx - irisR)) / (2 * irisR))
+        color = mix(IRIS_OUTER, IRIS_INNER, tIris)
+        if (d <= pupilR) color = PUPIL
+      }
+
+      // 高光
+      if (Math.hypot(x - hlX, y - hlY) <= hlR) color = mix(color, [255, 255, 255], 0.8)
+    }
+
+    return [color[0], color[1], color[2], 255]
+  }
 }
 
-function render() {
-  const px = Buffer.alloc(SIZE * SIZE * 4)
+function render(size) {
+  const SS = size >= 512 ? 2 : 3 // 大尺寸降一档采样，速度与质量平衡
+  const sample = makeSampler(size)
+  const px = Buffer.alloc(size * size * 4)
   const step = 1 / SS
   const offset = step / 2
 
-  for (let py = 0; py < SIZE; py++) {
-    for (let pxi = 0; pxi < SIZE; pxi++) {
+  for (let py = 0; py < size; py++) {
+    for (let pxi = 0; pxi < size; pxi++) {
       let r = 0
       let g = 0
       let b = 0
@@ -118,7 +139,7 @@ function render() {
 
       const n = SS * SS
       const alpha = a / n
-      const idx = (py * SIZE + pxi) * 4
+      const idx = (py * size + pxi) * 4
       if (alpha > 0) {
         px[idx] = Math.round(r / a)
         px[idx + 1] = Math.round(g / a)
@@ -195,7 +216,6 @@ function encodeIco(png, size) {
   entry[3] = 0
   entry.writeUInt16LE(1, 4) // planes
   entry.writeUInt16LE(32, 6) // bpp
-  entry.writeUInt32BE(0, 8)
   entry.writeUInt32LE(png.length, 8)
   entry.writeUInt32LE(22, 12)
 
@@ -204,12 +224,13 @@ function encodeIco(png, size) {
 
 /* ---------------- 输出 ---------------- */
 
-const pixels = render()
-const png = encodePng(pixels, SIZE)
+const appPng = encodePng(render(PNG_SIZE), PNG_SIZE)
+const icoPng = encodePng(render(ICO_SIZE), ICO_SIZE)
+const ico = encodeIco(icoPng, ICO_SIZE)
 
 mkdirSync(OUT_DIR, { recursive: true })
-writeFileSync(join(OUT_DIR, 'icon.png'), png)
-writeFileSync(join(OUT_DIR, 'icon.ico'), encodeIco(png, SIZE))
+writeFileSync(join(OUT_DIR, 'icon.png'), appPng)
+writeFileSync(join(OUT_DIR, 'icon.ico'), ico)
 
-console.log(`icon.png  ${png.length} bytes`)
-console.log(`icon.ico  ${encodeIco(png, SIZE).length} bytes`)
+console.log(`icon.png  ${PNG_SIZE}x${PNG_SIZE}  ${appPng.length} bytes`)
+console.log(`icon.ico  ${ICO_SIZE}x${ICO_SIZE}  ${ico.length} bytes`)

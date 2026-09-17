@@ -8,7 +8,7 @@
  *  - 这里用 fetch 直接调 API，失败信息可以原样打印出来。
  *
  * 用法：
- *   node scripts/publish-release.mjs --tag v0.3.0 [--dir release] [--dry-run]
+ *   node scripts/publish-release.mjs --tag v0.4.0 [--dir release] [--dry-run]
  * 环境变量：GITHUB_TOKEN（或 GH_TOKEN）、GITHUB_REPOSITORY（owner/repo）、GITHUB_REF_NAME
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
@@ -18,33 +18,41 @@ import { fileURLToPath } from 'node:url'
 
 const API = 'https://api.github.com'
 const UPLOAD_API = 'https://uploads.github.com'
-const ASSET_EXTENSIONS = ['.exe', '.zip', '.yml', '.blockmap']
+const ASSET_EXTENSIONS = ['.exe', '.zip', '.dmg', '.AppImage', '.deb', '.yml', '.blockmap']
 
 export const RELEASE_NOTES = [
-  '## ClauseEye · 契眼（Windows 免安装版）',
+  '## ClauseEye · 契眼（Windows / macOS / Linux）',
   '',
   '下载后**双击即可运行**，不需要安装 Node.js 或任何其它依赖。',
   '',
-  '| 文件 | 说明 |',
-  '|---|---|',
-  '| `ClauseEye-*-win-x64-setup.exe` | 安装版（**推荐**）。安装后可在应用内一键自动更新，后续版本无需手动下载 |',
-  '| `ClauseEye-*-portable.exe` | 单文件便携版，双击直接运行；免安装版无法自我更新，新版本会提示你到本页面下载 |',
-  '| `ClauseEye-green-win-x64.zip` | 绿色版目录，解压后双击 `ClauseEye.exe`。如果单文件版提示「应用程序控制策略已阻止此文件」（Windows 11 智能应用控制），请改用这个 |',
-  '| `latest.yml` / `*.blockmap` | 自动更新所需的元数据，**不要删除**（应用靠它判断是否有新版本） |',
+  '| 文件 | 平台 | 说明 |',
+  '|---|---|---|',
+  '| `ClauseEye-*-win-x64-setup.exe` | Windows | 安装版（**推荐**）。安装后可在应用内一键自动更新，后续版本无需手动下载 |',
+  '| `ClauseEye-*-win-x64-portable.exe` | Windows | 单文件便携版，双击直接运行；免安装版无法自我更新，新版本会提示你到本页面下载 |',
+  '| `ClauseEye-green-win-x64.zip` | Windows | 绿色版目录，解压后双击 `ClauseEye.exe`。如果单文件版提示「应用程序控制策略已阻止此文件」（Windows 11 智能应用控制），请改用这个 |',
+  '| `ClauseEye-*-mac-arm64.dmg` | macOS | Apple 芯片（M 系列）安装包 |',
+  '| `ClauseEye-*-mac-x64.dmg` | macOS | Intel 芯片安装包 |',
+  '| `ClauseEye-*-linux-x64.AppImage` | Linux | 免安装单文件：`chmod +x` 后双击运行；支持应用内自动更新 |',
+  '| `ClauseEye-*-linux-x64.deb` | Linux | Debian / Ubuntu 安装包（`sudo dpkg -i` 或双击安装） |',
+  '| `latest.yml` / `latest-mac.yml` / `latest-linux.yml` / `*.blockmap` | | 自动更新所需的元数据，**不要删除**（应用靠它判断是否有新版本） |',
   '',
-  '**更新机制**：安装版启动 20 秒后（或打开设置页点「检查更新」）会读取本页的 `latest.yml` 判断版本，',
-  '发现新版本会弹系统通知并在应用顶部提示，可一键下载并重启安装；便携版 / 绿色版只做提示，不自动替换文件。',
+  '**macOS 首次打开**：当前构建未做 Apple 开发者签名与公证，macOS 会提示「无法验证开发者」。',
+  '请在「访达」里**右键点图标 → 打开**，或执行 `xattr -dr com.apple.quarantine /Applications/ClauseEye.app` 后即可运行。',
+  '',
+  '**更新机制**：Windows 安装版与 Linux AppImage 启动 20 秒后（或打开设置页点「检查更新」）会读取本页的更新元数据判断版本，',
+  '发现新版本会弹系统通知并在应用顶部提示，可一键下载并重启安装；便携版 / 绿色版 / macOS 版只做提示，不自动替换文件。',
   '',
   '**V1 内容**：150 条中国法规则库（劳动/租房/Offer/离职/工伤/NDA/服务协议）、系统级到期提醒、系统钥匙串保护主密钥、离线 OCR（扫描件与图片识别，语言包随包分发）。',
   '',
-  '数据默认存放在 `%APPDATA%\\ClauseEye\\`，全部本地加密，应用不连接任何自建服务。',
+  '数据默认存放在本机用户目录（Windows 为 `%APPDATA%\\ClauseEye\\`），全部本地加密，应用不连接任何自建服务。',
 ].join('\n')
 
 const MIN_INSTALLER_BYTES = 30 * 1024 * 1024
 
 /**
  * 挑出要发布的产物：
- *  - 只认 exe / zip / yml / blockmap，忽略 builder-debug.yml 之类的中间文件
+ *  - 只认各平台产物（exe / zip / dmg / AppImage / deb / yml / blockmap），
+ *    忽略 builder-debug.yml 之类的中间文件
  *  - 安装版小于 30MB 一律视为「NSIS 中途失败留下的半成品」并剔除，
  *    避免把一个跑不起来的 setup.exe 发到 Releases 上
  */

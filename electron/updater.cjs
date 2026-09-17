@@ -57,14 +57,34 @@ function hasUpdateMetadata(resourcesPath) {
 }
 
 /**
+ * macOS 的自动更新走 Squirrel.Mac，会校验应用签名；没有 Apple Developer ID 的
+ * 未签名构建即使带着 app-update.yml 也无法完成更新（会被 Gatekeeper 拒绝）。
+ * 故 macOS 一律降级为「提示到发布页下载」；将来接入签名 + 公证后改成 true 即可。
+ */
+const DARWIN_AUTO_UPDATE_SUPPORTED = false
+
+/** 免安装/绿色版（以及未签名的 macOS 版）无法自我替换，只能提示手动下载 */
+function portableReasonMessage(platform) {
+  return platform === 'darwin'
+    ? '当前 macOS 版本未签名，无法自动更新，请下载新版本替换'
+    : '当前是免安装/绿色版，无法自动更新，请下载新版本替换'
+}
+
+/**
  * 判定更新形态：
  * - dev：未打包，仅用于验证提示链路
  * - installer：有更新元数据的安装版，可全自动更新
- * - portable：便携版 / 绿色版（无更新元数据），只能提示到发布页下载
+ * - portable：便携版 / 绿色版 / 未签名 macOS 版，只能提示到发布页下载
  */
-function detectUpdaterMode({ isPackaged, env = process.env, hasUpdateMetadata: hasMeta = false }) {
+function detectUpdaterMode({
+  isPackaged,
+  env = process.env,
+  hasUpdateMetadata: hasMeta = false,
+  platform = process.platform,
+}) {
   if (!isPackaged) return 'dev'
   if (isPortableBuild(env)) return 'portable'
+  if (platform === 'darwin' && !DARWIN_AUTO_UPDATE_SUPPORTED) return 'portable'
   return hasMeta ? 'installer' : 'portable'
 }
 
@@ -117,7 +137,7 @@ function createUpdater({ app, onEvent }) {
           version: latest,
           downloadPage: page,
           checkedAt,
-          message: mode === 'portable' ? '当前是免安装/绿色版，无法自动更新，请下载新版本替换' : '',
+          message: mode === 'portable' ? portableReasonMessage(process.platform) : '',
         })
       }
       return publish({ state: 'latest', version: latest, downloadPage: page, checkedAt, message: '' })
@@ -234,5 +254,6 @@ module.exports = {
   detectUpdaterMode,
   hasUpdateMetadata,
   isPortableBuild,
+  portableReasonMessage,
   RELEASES_PAGE,
 }

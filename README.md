@@ -15,21 +15,27 @@
 
 ## 快速开始
 
-### 方式一：下载免安装版（推荐）
+### 方式一：下载桌面版（Windows / macOS / Linux）
 
-到 [Releases](https://github.com/1576584678/ClauseEye/releases) 下载任一文件，**双击即可运行，不需要安装 Node.js 或任何其它依赖**：
+到 [Releases](https://github.com/1576584678/ClauseEye/releases) 下载对应平台的文件，**双击即可运行，不需要安装 Node.js 或任何其它依赖**：
 
-| 文件 | 说明 |
-|---|---|
-| `ClauseEye-0.3.0-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
-| `ClauseEye-0.3.0-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
-| `ClauseEye-green-win-x64.zip` | 绿色版目录，解压后双击 `ClauseEye.exe`。若单文件版被 Windows 11「智能应用控制」拦截，请改用这个 |
+| 平台 | 文件 | 说明 |
+|---|---|---|
+| Windows | `ClauseEye-0.4.0-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
+| Windows | `ClauseEye-0.4.0-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
+| Windows | `ClauseEye-green-win-x64.zip` | 绿色版目录，解压后双击 `ClauseEye.exe`。若单文件版被 Windows 11「智能应用控制」拦截，请改用这个 |
+| macOS | `ClauseEye-0.4.0-mac-arm64.dmg` | Apple 芯片（M 系列）安装包；另附同架构 `.zip`（自动更新元数据载体） |
+| macOS | `ClauseEye-0.4.0-mac-x64.dmg` | Intel 芯片安装包 |
+| Linux | `ClauseEye-0.4.0-linux-x64.AppImage` | 免安装单文件：`chmod +x ClauseEye-*.AppImage` 后直接运行；支持应用内自动更新 |
+| Linux | `ClauseEye-0.4.0-linux-x64.deb` | Debian / Ubuntu 安装包：`sudo dpkg -i ClauseEye-*.deb` |
 
-当前版本 **0.3.0**（界面改版：统一 SVG 图标体系与深色设计 token，补齐可见焦点与 reduced-motion 支持）。
+当前版本 **0.4.0**（新增 macOS / Linux 打包：dmg + AppImage + deb；Windows 产物与之前一致）。
 
-数据默认存放在 `%APPDATA%\ClauseEye\`，全部本地加密。
+数据默认存放在本机用户目录（Windows `%APPDATA%\ClauseEye\`、macOS `~/Library/Application Support/ClauseEye`、Linux `~/.config/ClauseEye`），全部本地加密。
 
-装好之后不用再管更新：**安装版**启动 20 秒后会自动检查新版本，发现更新会在应用顶部弹出横幅，点一下就能下载并重启安装；也可以随时在「设置 → 软件更新」里手动检查。**便携版 / 绿色版**无法自我替换文件，会弹系统通知提示你到本页下载新版本。
+装好之后不用再管更新：**Windows 安装版与 Linux AppImage**启动 20 秒后会自动检查新版本，发现更新会在应用顶部弹出横幅，点一下就能下载并重启安装；也可以随时在「设置 → 软件更新」里手动检查。**便携版 / 绿色版 / macOS 版**无法自我替换文件，会弹系统通知提示你到本页下载新版本。
+
+**macOS 首次打开**：当前构建未做 Apple 开发者签名与公证，系统会提示「无法验证开发者」。在「访达」里**右键点图标 → 打开**（或执行 `xattr -dr com.apple.quarantine /Applications/ClauseEye.app`）即可运行。因为未签名，macOS 版只提示下载新版本，不做自动替换；将来接入 Apple Developer ID 签名与公证后可升级为自动更新。
 
 ### 方式二：从源码运行
 
@@ -38,7 +44,7 @@ npm install          # 首次安装依赖
 npm run tessdata     # 下载离线 OCR 语言包（约 6.5 MB，只需一次）
 npm run dev          # 浏览器打开 http://localhost:5173
 npm run electron     # 或在 Electron 桌面壳中运行
-npm test             # 核心逻辑单测（62 项）
+npm test             # 核心逻辑单测
 npm run benchmark    # 规则库评测基准（召回 / 误报 / 引用可定位率）
 ```
 
@@ -154,12 +160,18 @@ npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、IndexedDB、资
 
 ```bash
 git push origin main
-git tag v0.3.0 && git push origin v0.3.0   # 打 tag 即自动触发构建与发布
+git tag v0.4.0 && git push origin v0.4.0   # 打 tag 即自动触发构建与发布
 ```
 
-`.github/workflows/release.yml` 在 tag 推送后自动完成：类型检查 + 单测 → 打包安装版 / 便携版 / 绿色版 → 上传 `setup.exe`、`portable.exe`、`latest.yml`、`*.blockmap` → 创建或更新 Release（写入发布说明，并自动清理同一 tag 上重复的 Release 条目）。
+`.github/workflows/release.yml` 在 tag 推送后自动完成：
 
-发布完成后已安装用户**无需任何操作**：安装版下次启动或手动检查发现版本变化即可一键自动更新；便携版与绿色版会收到「有新版本」的系统通知与下载页提示。
+1. **三个平台并行构建**（`windows-latest` / `macos-latest` / `ubuntu-latest`），每个平台各自跑类型检查 + 单测，再打包自己的产物；
+2. **汇总到一个发布 job**：把三份产物合并后去重、上传 `setup.exe` / `portable.exe` / `dmg` / `AppImage` / `deb` / `latest*.yml` / `*.blockmap`，创建或更新 Release 并写入发布说明（同时清理同一 tag 上重复的 Release 条目）；
+3. **产物校验**：分平台检查产物是否存在，缺平台会在日志里给出 `::warning::`，Windows 一个 exe 都没有则整次失败。
+
+手动触发（Actions → Build & Release → Run workflow）只构建、不发布，用来验证多平台链路。
+
+发布完成后已安装用户**无需任何操作**：Windows 安装版与 Linux AppImage 下次启动或手动检查发现版本变化即可一键自动更新；便携版、绿色版与 macOS 版会收到「有新版本」的系统通知与下载页提示。
 
 ## 状态
 
