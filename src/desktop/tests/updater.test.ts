@@ -43,24 +43,24 @@ describe('版本比较（更新判定）', () => {
 
 describe('更新形态判定', () => {
   it('未打包时是开发模式', () => {
-    expect(detectUpdaterMode({ isPackaged: false, env: {} })).toBe('dev')
-    expect(detectUpdaterMode({ isPackaged: false, env: { PORTABLE_EXECUTABLE_DIR: 'C:\\tmp' } })).toBe('dev')
+    expect(detectUpdaterMode({ isPackaged: false, env: {}, platform: 'win32' })).toBe('dev')
+    expect(detectUpdaterMode({ isPackaged: false, env: { PORTABLE_EXECUTABLE_DIR: 'C:\\tmp' }, platform: 'win32' })).toBe('dev')
   })
 
   it('只有带更新元数据的安装版才走自动更新', () => {
-    expect(detectUpdaterMode({ isPackaged: true, env: {}, hasUpdateMetadata: true })).toBe('installer')
+    expect(detectUpdaterMode({ isPackaged: true, env: {}, hasUpdateMetadata: true, platform: 'win32' })).toBe('installer')
   })
 
   it('绿色版没有更新元数据，降级为手动更新', () => {
-    expect(detectUpdaterMode({ isPackaged: true, env: {}, hasUpdateMetadata: false })).toBe('portable')
-    expect(detectUpdaterMode({ isPackaged: true, env: {} })).toBe('portable')
+    expect(detectUpdaterMode({ isPackaged: true, env: {}, hasUpdateMetadata: false, platform: 'win32' })).toBe('portable')
+    expect(detectUpdaterMode({ isPackaged: true, env: {}, platform: 'win32' })).toBe('portable')
   })
 
   it('electron-builder 注入便携版环境变量后判定为便携版', () => {
-    expect(detectUpdaterMode({ isPackaged: true, env: { PORTABLE_EXECUTABLE_DIR: 'C:\\Users\\a\\Temp\\x' } })).toBe(
+    expect(detectUpdaterMode({ isPackaged: true, env: { PORTABLE_EXECUTABLE_DIR: 'C:\\Users\\a\\Temp\\x' }, platform: 'win32' })).toBe(
       'portable',
     )
-    expect(detectUpdaterMode({ isPackaged: true, env: { PORTABLE_EXECUTABLE_FILE: 'C:\\x\\a.exe' } })).toBe('portable')
+    expect(detectUpdaterMode({ isPackaged: true, env: { PORTABLE_EXECUTABLE_FILE: 'C:\\x\\a.exe' }, platform: 'win32' })).toBe('portable')
   })
 
   it('macOS 未签名构建降级为手动更新（Squirrel.Mac 要求签名）', () => {
@@ -78,7 +78,7 @@ describe('更新形态判定', () => {
     )
   })
 
-  it('免安装提示语戍区分 macOS 与 Windows', () => {
+  it('免安装提示语需区分 macOS 与 Windows', () => {
     expect(portableReasonMessage('darwin')).toContain('macOS')
     expect(portableReasonMessage('win32')).toContain('免安装')
   })
