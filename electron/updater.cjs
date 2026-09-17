@@ -9,6 +9,7 @@
  * 更新检查是**唯一**会访问自有/第三方服务的网络行为，且只读取版本号与发布说明，
  * 不会上传任何本地数据。设置页可关闭"启动时自动检查"。
  */
+const fs = require('node:fs')
 const path = require('node:path')
 
 const REPO = { owner: '1576584678', repo: 'ClauseEye' }
@@ -45,15 +46,36 @@ function isPortableBuild(env = process.env) {
   return Boolean(env.PORTABLE_EXECUTABLE_DIR || env.PORTABLE_EXECUTABLE_FILE)
 }
 
-/** 判定更新形态：安装版可自动更新，便携版只能提示，未打包则为开发模式 */
-function detectUpdaterMode({ isPackaged, env = process.env }) {
+/** electron-builder 只会在安装版/便携版的 resources 目录下生成 app-update.yml */
+function hasUpdateMetadata(resourcesPath) {
+  if (!resourcesPath) return false
+  try {
+    return fs.existsSync(path.join(resourcesPath, 'app-update.yml'))
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 判定更新形态：
+ * - dev：未打包，仅用于验证提示链路
+ * - installer：有更新元数据的安装版，可全自动更新
+ * - portable：便携版 / 绿色版（无更新元数据），只能提示到发布页下载
+ */
+function detectUpdaterMode({ isPackaged, env = process.env, hasUpdateMetadata: hasMeta = false }) {
   if (!isPackaged) return 'dev'
-  return isPortableBuild(env) ? 'portable' : 'installer'
+  if (isPortableBuild(env)) return 'portable'
+  return hasMeta ? 'installer' : 'portable'
 }
 
 function createUpdater({ app, onEvent }) {
   const currentVersion = app.getVersion()
-  const mode = detectUpdaterMode({ isPackaged: app.isPackaged, env: process.env })
+  const mode = detectUpdaterMode({
+    isPackaged: app.isPackaged,
+    env: process.env,
+    // 绿色版/便携版没有 app-update.yml，只能提示手动下载
+    hasUpdateMetadata: hasUpdateMetadata(process.resourcesPath),
+  })
 
   let state = {
     mode,
@@ -95,7 +117,7 @@ function createUpdater({ app, onEvent }) {
           version: latest,
           downloadPage: page,
           checkedAt,
-          message: mode === 'portable' ? '免安装版无法自动更新，请下载新版本替换' : '',
+          message: mode === 'portable' ? '当前是免安装/绿色版，无法自动更新，请下载新版本替换' : '',
         })
       }
       return publish({ state: 'latest', version: latest, downloadPage: page, checkedAt, message: '' })
@@ -206,4 +228,11 @@ function createUpdater({ app, onEvent }) {
   }
 }
 
-module.exports = { createUpdater, compareVersions, detectUpdaterMode, isPortableBuild, RELEASES_PAGE }
+module.exports = {
+  createUpdater,
+  compareVersions,
+  detectUpdaterMode,
+  hasUpdateMetadata,
+  isPortableBuild,
+  RELEASES_PAGE,
+}

@@ -1,7 +1,7 @@
 {
   "name": "clauseeye",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "ClauseEye / 契眼 — 本地优先的个人合同文档管家：坑点扫描、Offer 对比、到期提醒、离线 OCR（桌面版 + Web 版）",
   "scripts": {
@@ -19,6 +19,7 @@
     "dist:release": "npm run build && node scripts/dist.mjs --publish",
     "dist:green": "npm run build && node scripts/build-green.mjs",
     "tessdata": "node scripts/fetch-tessdata.mjs",
+    "dedupe:releases": "node scripts/dedupe-releases.mjs",
     "benchmark": "vitest run src/core/tests/benchmark.test.ts --reporter=verbose",
     "build:release": "npm run tessdata && npm run build"
   },

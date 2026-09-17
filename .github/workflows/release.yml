@@ -21,7 +21,10 @@ jobs:
       # electron-builder 需要下载 electron / nsis / winCodeSign，CI 直连 GitHub 即可
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
+      # fetch-depth: 0 —— 自动生成「本次更新」需要能读到上一个 tag 到当前 tag 的提交
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -67,10 +70,14 @@ jobs:
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then PUBLISH=always; else PUBLISH=never; fi
           npx electron-builder --win --config.npmRebuild=false --config.win.target=portable --publish "$PUBLISH"
 
-      - name: 构建绿色版目录（绕过智能应用控制的兜底方案）
+      # 绿色版只是「便携版被系统策略拦截时」的兜底方案，失败不应影响正式产物发布
+      - name: 构建绿色版目录（兜底方案，允许失败）
+        id: green
+        continue-on-error: true
         run: node scripts/build-green.mjs
 
       - name: 压缩绿色版
+        if: steps.green.outcome == 'success'
         shell: pwsh
         run: |
           $zip = 'release/ClauseEye-green-win-x64.zip'
@@ -81,12 +88,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ClauseEye-windows
+          if-no-files-found: warn
           path: |
             release/*.exe
             release/*.zip
             release/*.yml
             release/*.blockmap
           retention-days: 30
+
+      # 同一个 tag 上若同时存在 electron-builder 自动创建的 Release 与 gh 创建的 Release，
+      # Releases 页面会出现两个同名条目（资产还各缺一半）。这里只保留资产最全的那条。
+      - name: 清理重复的 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/dedupe-releases.mjs --apply
 
       - name: 创建 / 更新 Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -107,18 +123,42 @@ jobs:
           | `latest.yml` / `*.blockmap` | 自动更新所需的元数据，**不要删除**（应用靠它判断是否有新版本） |
 
           **更新机制**：安装版启动 20 秒后（或打开设置页点「检查更新」）会读取本页的 `latest.yml` 判断版本，
-          发现新版本可一键下载并重启安装；便携版只做提示，不自动替换文件。
+          发现新版本会弹系统通知并在应用顶部提示，可一键下载并重启安装；便携版 / 绿色版只做提示，不自动替换文件。
 
-          **V1 新增**：150 条中国法规则库（劳动/租房/Offer/离职/工伤/NDA/服务协议）、系统级到期提醒、系统钥匙串保护主密钥、离线 OCR（扫描件与图片识别，语言包随包分发）。
+          **V1 内容**：150 条中国法规则库（劳动/租房/Offer/离职/工伤/NDA/服务协议）、系统级到期提醒、系统钥匙串保护主密钥、离线 OCR（扫描件与图片识别，语言包随包分发）。
 
           数据默认存放在 `%APPDATA%\ClauseEye\`，全部本地加密，应用不连接任何自建服务。
           EOF
           )
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" release/*.exe release/*.zip release/*.yml release/*.blockmap --clobber
+
+          # 自动附上「上一个 tag → 当前 tag」的提交列表，省去手写发布说明
+          PREV_TAG=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+          if [ -n "${PREV_TAG}" ]; then
+            CHANGES=$(git log --no-merges --pretty='- %s' "${PREV_TAG}..${GITHUB_REF_NAME}")
           else
-            gh release create "${GITHUB_REF_NAME}" release/*.exe release/*.zip release/*.yml release/*.blockmap \
+            CHANGES=$(git log --no-merges --pretty='- %s' -20 "${GITHUB_REF_NAME}")
+          fi
+          if [ -n "${CHANGES}" ]; then
+            NOTES="${NOTES}
+
+          ### 本次更新
+
+          ${CHANGES}"
+          fi
+
+          # 只提交实际存在的产物，避免绿色版构建失败时 gh 因通配符无匹配而报错
+          assets=()
+          for f in release/*.exe release/*.zip release/*.yml release/*.blockmap; do
+            if [ -e "$f" ]; then assets+=("$f"); fi
+          done
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            # electron-builder 已经建好了 Release，这里补上说明并确保资产齐全
+            gh release edit "${GITHUB_REF_NAME}" --title "ClauseEye ${GITHUB_REF_NAME}" --notes "$NOTES" --latest
+            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${assets[@]}" \
               --title "ClauseEye ${GITHUB_REF_NAME}" \
               --notes "$NOTES" \
               ${{ inputs.draft && '--draft' || '' }}
           fi
+          echo "Release: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}"

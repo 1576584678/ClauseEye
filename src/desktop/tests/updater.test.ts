@@ -1,12 +1,20 @@
 import { createRequire } from 'node:module'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const requireCjs = createRequire(import.meta.url)
 const updaterPath = fileURLToPath(new URL('../../../electron/updater.cjs', import.meta.url))
-const { compareVersions, detectUpdaterMode } = requireCjs(updaterPath) as {
+const { compareVersions, detectUpdaterMode, hasUpdateMetadata } = requireCjs(updaterPath) as {
   compareVersions: (a: string, b: string) => number
-  detectUpdaterMode: (input: { isPackaged: boolean; env?: Record<string, string | undefined> }) => string
+  hasUpdateMetadata: (resourcesPath?: string) => boolean
+  detectUpdaterMode: (input: {
+    isPackaged: boolean
+    env?: Record<string, string | undefined>
+    hasUpdateMetadata?: boolean
+  }) => string
 }
 
 describe('版本比较（更新判定）', () => {
@@ -35,8 +43,13 @@ describe('更新形态判定', () => {
     expect(detectUpdaterMode({ isPackaged: false, env: { PORTABLE_EXECUTABLE_DIR: 'C:\\tmp' } })).toBe('dev')
   })
 
-  it('打包后默认是安装版（可自动更新）', () => {
-    expect(detectUpdaterMode({ isPackaged: true, env: {} })).toBe('installer')
+  it('只有带更新元数据的安装版才走自动更新', () => {
+    expect(detectUpdaterMode({ isPackaged: true, env: {}, hasUpdateMetadata: true })).toBe('installer')
+  })
+
+  it('绿色版没有更新元数据，降级为手动更新', () => {
+    expect(detectUpdaterMode({ isPackaged: true, env: {}, hasUpdateMetadata: false })).toBe('portable')
+    expect(detectUpdaterMode({ isPackaged: true, env: {} })).toBe('portable')
   })
 
   it('electron-builder 注入便携版环境变量后判定为便携版', () => {
@@ -44,5 +57,23 @@ describe('更新形态判定', () => {
       'portable',
     )
     expect(detectUpdaterMode({ isPackaged: true, env: { PORTABLE_EXECUTABLE_FILE: 'C:\\x\\a.exe' } })).toBe('portable')
+  })
+})
+
+describe('更新元数据探测（安装版专有）', () => {
+  it('resources 下没有 app-update.yml 时返回 false', () => {
+    expect(hasUpdateMetadata(undefined)).toBe(false)
+    expect(hasUpdateMetadata(join(tmpdir(), 'clauseeye-not-exist-' + Date.now()))).toBe(false)
+  })
+
+  it('存在 app-update.yml 时返回 true（安装版据此启用自动更新）', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'clauseeye-appupdate-'))
+    try {
+      expect(hasUpdateMetadata(dir)).toBe(false)
+      writeFileSync(join(dir, 'app-update.yml'), 'provider: github\n')
+      expect(hasUpdateMetadata(dir)).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

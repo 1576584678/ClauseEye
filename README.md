@@ -21,11 +21,16 @@
 
 | 文件 | 说明 |
 |---|---|
-| `ClauseEye-0.2.0-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
-| `ClauseEye-0.2.0-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
+| `ClauseEye-0.2.1-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
+| `ClauseEye-0.2.1-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
 | `ClauseEye-green-win-x64.zip` | 绿色版目录，解压后双击 `ClauseEye.exe`。若单文件版被 Windows 11「智能应用控制」拦截，请改用这个 |
 
+当前版本 **0.2.1**（V1 的补丁版：修复安装版自动更新形态检测，让「发现新版本」能真正走到一键更新）。
+
 数据默认存放在 `%APPDATA%\ClauseEye\`，全部本地加密。
+数据默认存放在 `%APPDATA%\ClauseEye\`，全部本地加密。
+
+装好之后不用再管更新：**安装版**启动 20 秒后会自动检查新版本，发现更新会在应用顶部弹出横幅，点一下就能下载并重启安装；也可以随时在「设置 → 软件更新」里手动检查。**便携版 / 绿色版**无法自我替换文件，会弹系统通知提示你到本页下载新版本。
 
 ### 方式二：从源码运行
 
@@ -34,7 +39,7 @@ npm install          # 首次安装依赖
 npm run tessdata     # 下载离线 OCR 语言包（约 6.5 MB，只需一次）
 npm run dev          # 浏览器打开 http://localhost:5173
 npm run electron     # 或在 Electron 桌面壳中运行
-npm test             # 核心逻辑单测（58 项）
+npm test             # 核心逻辑单测（62 项）
 npm run benchmark    # 规则库评测基准（召回 / 误报 / 引用可定位率）
 ```
 
@@ -123,7 +128,7 @@ samples/            6 份虚构示例文档（同时被单测与评测基准用�
 ## 测试与自检
 
 ```bash
-npm test              # 58 项单测：文本解析、分类、规则命中、引用可定位、Offer 对比、防幻觉、提醒计划
+npm test              # 62 项单测：文本解析、分类、规则命中、引用可定位、Offer 对比、防幻觉、提醒计划
 npm run benchmark     # 评测基准：召回率 / 误报数 / 引用可定位率
 npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、IndexedDB、资源加载、Worker、preload 桥、OCR 端到端
 ```
@@ -145,6 +150,17 @@ npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、IndexedDB、资
 - **tesseract.js + tessdata_fast** — 离线 OCR（WASM，无需原生编译）
 - **Electron safeStorage** — 借操作系统钥匙串保护主密钥
 - **OpenContracts**（MIT，可自托管）— 条款抽取 / 标注 / 版本对比 / RAG 底座（后续演进参考）
+
+## 发布流程（维护者）
+
+```bash
+git push origin main
+git tag v0.2.1 && git push origin v0.2.1   # 打 tag 即自动触发构建与发布
+```
+
+`.github/workflows/release.yml` 在 tag 推送后自动完成：类型检查 + 单测 → 打包安装版 / 便携版 / 绿色版 → 上传 `setup.exe`、`portable.exe`、`latest.yml`、`*.blockmap` → 创建或更新 Release（写入发布说明，并自动清理同一 tag 上重复的 Release 条目）。
+
+发布完成后已安装用户**无需任何操作**：安装版下次启动或手动检查发现版本变化即可一键自动更新；便携版与绿色版会收到「有新版本」的系统通知与下载页提示。
 
 ## 状态
 

@@ -36,6 +36,31 @@ const ELECTRON_DIST = join(ROOT, 'node_modules', 'electron', 'dist')
 const DIST_DIR = join(ROOT, 'dist')
 const STAGE_DIR = join(OUT_DIR, '.app-src')
 
+/** 重命名；被杀软/索引器短暂占用时退化为"复制 + 删除"，最多重试 5 次 */
+function renameWithFallback(from, to) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      renameSync(from, to)
+      return
+    } catch (error) {
+      if (!existsSync(from)) return
+      try {
+        cpSync(from, to)
+        rmSync(from, { force: true })
+        return
+      } catch {
+        if (attempt === 4) throw error
+        sleepSync(400)
+      }
+    }
+  }
+}
+
+function sleepSync(ms) {
+  const shared = new SharedArrayBuffer(4)
+  Atomics.wait(new Int32Array(shared), 0, 0, ms)
+}
+
 function fail(message) {
   console.error(`✗ ${message}`)
   process.exit(1)
@@ -53,7 +78,7 @@ if (existsSync(STAGE_DIR)) rmSync(STAGE_DIR, { recursive: true, force: true })
 
 // 1) 拷贝官方 Electron 运行时（含 electron.exe 及其依赖的 dll / pak / locales）
 cpSync(ELECTRON_DIST, APP_DIR, { recursive: true })
-renameSync(join(APP_DIR, 'electron.exe'), join(APP_DIR, 'ClauseEye.exe'))
+renameWithFallback(join(APP_DIR, 'electron.exe'), join(APP_DIR, 'ClauseEye.exe'))
 
 // 2) 组装 app.asar：只需要主进程 + 前端产物 + 图标，前端依赖已被 Vite 打进 dist
 mkdirSync(join(STAGE_DIR, 'electron'), { recursive: true })
