@@ -103,6 +103,12 @@ jobs:
           echo "::warning::安装版打包失败，降级为仅发布便携版"
           npx electron-builder --win --config.npmRebuild=false --config.win.target=portable --publish never
 
+      # CI 上 `npm ci` 之后 node_modules/electron/dist 可能不存在（Electron 下载被跳过/失败），
+      # 绿色版外壳需要官方 Electron 运行时，这里补齐后再构建
+      - name: 确保 Electron 运行时
+        if: matrix.slug == 'windows'
+        continue-on-error: true
+        run: node scripts/ensure-electron-dist.mjs
       # 绿色版只是「便携版被系统策略拦截时」的兜底方案，失败不应影响正式产物发布
       - name: 构建绿色版目录（Windows 兜底方案，允许失败）
         id: green
