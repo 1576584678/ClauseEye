@@ -1,7 +1,7 @@
 {
   "name": "clauseeye",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.7.1",
   "type": "module",
   "description": "ClauseEye / 契眼 — 本地优先的个人合同文档管家：坑点扫描、Offer 对比、到期提醒、离线 OCR（桌面版 + Web 版）",
   "scripts": {
@@ -57,7 +57,10 @@
       "electron/**/*",
       "dist/**/*",
       "build/icon.png",
-      "package.json"
+      "package.json",
+      "!node_modules/tesseract.js-core/*.wasm.js",
+      "!node_modules/tesseract.js/dist/**",
+      "!node_modules/tesseract.js/docs/**"
     ],
     "asar": true,
     "compression": "maximum",

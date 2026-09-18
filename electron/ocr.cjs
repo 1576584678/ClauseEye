@@ -48,14 +48,6 @@ function tessdataDir() {
   return null
 }
 
-function resolveModuleFile(request) {
-  try {
-    return resolveUnpacked(require.resolve(request))
-  } catch {
-    return undefined
-  }
-}
-
 function getWorker(langs) {
   const key = langs.join('+')
   if (!workers.has(key)) {
@@ -75,8 +67,9 @@ function getWorker(langs) {
         throw new Error('缺少本地 OCR 语言包（dist/tessdata/chi_sim.traineddata）。请先运行 npm run tessdata 再构建。')
       }
       options.langPath = langPath
-      const corePath = resolveModuleFile('tesseract.js-core/tesseract-core-simd.wasm.js')
-      if (corePath) options.corePath = corePath
+      // corePath 只对浏览器 worker 生效；Node worker（worker_threads）不读它，
+      // 而是按 CPU 特性自己 require('tesseract.js-core/tesseract-core-<variant>')，
+      // 因此这里不再指定——绿色版与安装包据此裁掉浏览器专用的 *.wasm.js（约 25MB）。
       // worker 脚本必须指向 asar 外的真实文件：worker_threads 读不了 app.asar 内的路径
       const workerPath = resolveUnpacked(path.join(path.dirname(require.resolve('tesseract.js')), 'worker-script', 'node', 'index.js'))
       if (fs.existsSync(workerPath)) options.workerPath = workerPath

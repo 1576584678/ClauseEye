@@ -113,6 +113,43 @@ function collectRuntimeDeps() {
   return [...seen].sort()
 }
 
+/** 目录累计字节数，用于打印裁剪收益 */
+function dirBytes(dir) {
+  let total = 0
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) total += dirBytes(full)
+    else total += statSync(full).size
+  }
+  return total
+}
+
+/**
+ * 裁剪 OCR 运行时里 Node worker 走不到的文件：
+ *   - tesseract.js-core/*.wasm.js：浏览器 importScripts 用的单文件版（6 个，共约 25MB），
+ *     Node 侧 getCore 直接 require 变体模块，只会用到 <variant>.js + 同目录 <variant>.wasm；
+ *   - tesseract.js/dist、docs：浏览器 UMD/ESM 产物与文档，Node 走 src/。
+ * 返回省下的字节数。
+ */
+function pruneOcrRuntime(stageDir) {
+  const coreDir = join(stageDir, 'node_modules', 'tesseract.js-core')
+  let saved = 0
+  if (existsSync(coreDir)) {
+    const before = dirBytes(coreDir)
+    for (const name of readdirSync(coreDir)) {
+      if (name.endsWith('.wasm.js')) rmSync(join(coreDir, name), { force: true })
+    }
+    saved += before - dirBytes(coreDir)
+  }
+  for (const rel of [join('node_modules', 'tesseract.js', 'dist'), join('node_modules', 'tesseract.js', 'docs')]) {
+    const target = join(stageDir, rel)
+    if (!existsSync(target)) continue
+    saved += dirBytes(target)
+    rmSync(target, { recursive: true, force: true })
+  }
+  return saved
+}
+
 if (!existsSync(join(DIST_DIR, 'index.html'))) fail('缺少 dist/，请先执行 npm run build')
 if (!existsSync(join(ELECTRON_DIST, 'electron.exe'))) fail('缺少 node_modules/electron/dist，请先执行 npm install')
 
@@ -153,6 +190,9 @@ for (const key of runtimeDeps) {
   if (!existsSync(from)) fail(`缺少 ${key}，请先执行 npm install`)
   cpSync(from, join(STAGE_DIR, key), { recursive: true })
 }
+
+// 2.2) 裁剪 OCR 运行时里 Node worker 根本走不到的文件（浏览器专用的 *.wasm.js 与文档）
+const prunedBytes = pruneOcrRuntime(STAGE_DIR)
 
 // 解包范围：worker 脚本所在的目录树整体落到 app.asar.unpacked（真实文件）。
 // worker 里 require 的每个依赖（is-url / regenerator-runtime / wasm-feature-detect …）
@@ -211,6 +251,7 @@ const sizeMb = (target) => {
 
 console.log('✓ 绿色版构建完成')
 console.log(`  运行时依赖：${runtimeDeps.length} 个`)
+console.log(`  OCR 运行时裁剪：省下 ${(prunedBytes / 1024 / 1024).toFixed(1)} MB（浏览器专用 *.wasm.js 与文档）`)
 console.log(`  目录：${APP_DIR}`)
 console.log(`  大小：${sizeMb(APP_DIR)} MB（未压缩）`)
 console.log('  双击 ClauseEye.exe 运行')
