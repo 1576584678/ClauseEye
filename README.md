@@ -114,7 +114,7 @@ npm run benchmark
 src/
 ├─ core/            纯逻辑（无 UI / 无浏览器依赖，可单测）
 │  ├─ classify.ts     自动分类器
-│  ├─ rules/          规则引擎 + 8 个场景包（种子包 + v1 扩充包）
+│  ├─ rules/          规则引擎 + 11 个场景包（种子包 + v1 扩充包）
 │  ├─ eval/           规则库评测基准与用例集
 │  ├─ reminders.ts    关键日期 → 通知计划（纯函数）
 │  ├─ analyze.ts      分析管线 + BYOK 结果合并（防幻觉）
