@@ -12,6 +12,9 @@ export type CategoryCode =
   | 'injury' // 工伤鉴定 / 劳动能力鉴定
   | 'nda' // 保密协议
   | 'service' // 服务 / 外包 / 委托协议
+  | 'house' // 二手房买卖
+  | 'decoration' // 装修 / 家装
+  | 'driving' // 驾校培训
   | 'other'
 
 export type RulePackId = CategoryCode | 'common'

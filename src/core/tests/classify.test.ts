@@ -9,6 +9,9 @@ const expectations: Record<string, string> = {
   'offer-b': 'offer',
   resignation: 'resignation',
   injury: 'injury',
+  house: 'house',
+  decoration: 'decoration',
+  driving: 'driving',
 }
 
 describe('自动分类器', () => {

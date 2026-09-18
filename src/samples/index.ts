@@ -3,6 +3,9 @@
  * 内容为虚构的示例合同，仅用于演示，不代表真实法律意见。
  */
 
+import decorationContract from '../../samples/decoration-contract.txt?raw'
+import drivingSchool from '../../samples/driving-school.txt?raw'
+import houseContract from '../../samples/house-contract.txt?raw'
 import injuryReport from '../../samples/injury-report.txt?raw'
 import laborContract from '../../samples/labor-contract.txt?raw'
 import offerA from '../../samples/offer-a.txt?raw'
@@ -60,6 +63,27 @@ export const SAMPLE_DOCS: SampleDoc[] = [
     fileName: '示例-工伤鉴定.txt',
     text: injuryReport,
     hint: '结论含糊（"建议评定"）、未提再次鉴定期限',
+  },
+  {
+    key: 'house',
+    title: '示例 · 二手房买卖合同（坑点集中）',
+    fileName: '示例-二手房买卖合同.txt',
+    text: houseContract,
+    hint: '定金单向罚则、成交价以评估价为准、全部税费买方承担、卖方单方解除',
+  },
+  {
+    key: 'decoration',
+    title: '示例 · 装修施工合同（增项与付款陷阱）',
+    fileName: '示例-装修施工合同.txt',
+    text: decorationContract,
+    hint: '开工前付 60%、增项不设上限、保修 6 个月、隐蔽工程不验收',
+  },
+  {
+    key: 'driving',
+    title: '示例 · 驾培协议（退费与免责条款）',
+    fileName: '示例-驾培协议.txt',
+    text: drivingSchool,
+    hint: '退学不退费、补考费另行收取、不得换教练、人身伤害免责',
   },
 ]
 

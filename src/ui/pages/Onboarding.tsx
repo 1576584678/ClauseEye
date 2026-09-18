@@ -44,11 +44,11 @@ export function Onboarding() {
         <ul className="feature-list">
           <li>
             <strong>零上报</strong>
-            <span>文档、分析结果、密钥全部留在本机加密数据库（IndexedDB + AES-GCM），没有服务端。</span>
+            <span>文档、分析结果、密钥全部留在本机加密库（桌面端为单文件 vault.sqlite，AES-256-GCM 逐条加密），没有服务端。</span>
           </li>
           <li>
             <strong>坑点雷达</strong>
-            <span>劳动合同 / 租房 / Offer / 离职证明 / 工伤鉴定种子规则库，离线即可出结果。</span>
+            <span>劳动合同 / 租房 / 二手房买卖 / 装修合同 / 驾培协议 / Offer / 离职证明 / 工伤鉴定等 11 类场景共 186 条规则，离线即可出结果。</span>
           </li>
           <li>
             <strong>多 Offer 对比</strong>

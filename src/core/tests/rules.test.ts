@@ -100,6 +100,48 @@ describe('规则引擎', () => {
     expect(injury.has('injury.no-recheck-deadline')).toBe(true)
   })
 
+  it('二手房 / 装修 / 驾培示例命中各自关键坑点', () => {
+    const house = new Set(analyzeDocument(textOf('house')).risks.map((r) => r.ruleId))
+    for (const id of [
+      'house.deposit-forfeit-only-buyer',
+      'house.price-not-fixed',
+      'house.mortgage-or-seizure-unresolved',
+      'house.household-not-moved',
+      'house.all-taxes-on-buyer',
+      'house.as-is-waiver',
+      'house.seller-unilateral-termination',
+      'house.loan-failure-buyer-default',
+    ]) {
+      expect(house.has(id), id).toBe(true)
+    }
+
+    const decoration = new Set(analyzeDocument(textOf('decoration')).risks.map((r) => r.ruleId))
+    for (const id of [
+      'decoration.advance-payment-too-high',
+      'decoration.deadline-not-fixed',
+      'decoration.extra-items-unlimited',
+      'decoration.warranty-too-short',
+      'decoration.final-payment-before-acceptance',
+      'decoration.hidden-works-skipped',
+      'decoration.environment-waiver',
+    ]) {
+      expect(decoration.has(id), id).toBe(true)
+    }
+
+    const driving = new Set(analyzeDocument(textOf('driving')).risks.map((r) => r.ruleId))
+    for (const id of [
+      'driving.no-refund-on-withdraw',
+      'driving.extra-fees-unlimited',
+      'driving.no-training-deadline',
+      'driving.coach-not-changeable',
+      'driving.injury-waiver',
+      'driving.vehicle-damage-liability',
+      'driving.personal-info-marketing',
+    ]) {
+      expect(driving.has(id), id).toBe(true)
+    }
+  })
+
   it('通用规则不与场景规则重复报告同一条款', () => {
     const analysis = analyzeDocument(textOf('labor'))
     const specific = new Set(

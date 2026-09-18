@@ -39,6 +39,25 @@ export interface ShellPrefs {
   platform: string
 }
 
+/** 加密单文件保险箱（主进程 node:sqlite）的状态与读写接口 */
+export interface VaultStoreStatus {
+  available: boolean
+  driver?: 'sqlite'
+  engine?: string
+  /** 单文件库的绝对路径（便于备份 / 迁移） */
+  file?: string
+  records?: number
+  bytes?: number
+  reason?: string
+}
+
+export interface VaultStoreRow {
+  id: string
+  /** vault.ts 加密后的密文（结构由 src/storage/crypto.ts 定义） */
+  sealed: unknown
+  updatedAt: string
+}
+
 export interface OcrResult {
   ok: boolean
   text?: string
@@ -61,6 +80,17 @@ interface ClauseEyeBridge {
     save: (value: string) => Promise<boolean>
     load: () => Promise<string | null>
     clear: () => Promise<boolean>
+  }
+  store: {
+    status: () => Promise<VaultStoreStatus>
+    putRecord: (row: VaultStoreRow) => Promise<boolean>
+    getRecord: (id: string) => Promise<VaultStoreRow | undefined>
+    getAllRecords: () => Promise<VaultStoreRow[]>
+    deleteRecord: (id: string) => Promise<boolean>
+    clearRecords: () => Promise<boolean>
+    putMeta: (key: string, value: unknown) => Promise<boolean>
+    getMeta: (key: string) => Promise<unknown>
+    clearMeta: () => Promise<boolean>
   }
   ocr: {
     available: () => Promise<boolean>
@@ -316,4 +346,50 @@ export const updaterBridge = {
       return () => undefined
     }
   },
+}
+
+/**
+ * 加密单文件保险箱（主进程 node:sqlite）。
+ * 桌面端优先用它承载全部密文记录；浏览器预览拿不到桥接时由调用方退回 IndexedDB。
+ */
+export const vaultStoreBridge = {
+  async status(): Promise<VaultStoreStatus> {
+    const bridge = getBridge()
+    if (!bridge || !bridge.store) return { available: false, reason: '浏览器环境没有单文件库驱动' }
+    try {
+      return await bridge.store.status()
+    } catch (error) {
+      return { available: false, reason: String((error as Error)?.message ?? error) }
+    }
+  },
+  async putRecord(row: VaultStoreRow): Promise<void> {
+    await storeApi().putRecord(row)
+  },
+  async getRecord(id: string): Promise<VaultStoreRow | undefined> {
+    return storeApi().getRecord(id)
+  },
+  async getAllRecords(): Promise<VaultStoreRow[]> {
+    return storeApi().getAllRecords()
+  },
+  async deleteRecord(id: string): Promise<void> {
+    await storeApi().deleteRecord(id)
+  },
+  async clearRecords(): Promise<void> {
+    await storeApi().clearRecords()
+  },
+  async putMeta(key: string, value: unknown): Promise<void> {
+    await storeApi().putMeta(key, value)
+  },
+  async getMeta<T = unknown>(key: string): Promise<T | undefined> {
+    return (await storeApi().getMeta(key)) as T | undefined
+  },
+  async clearMeta(): Promise<void> {
+    await storeApi().clearMeta()
+  },
+}
+
+function storeApi(): NonNullable<ClauseEyeBridge['store']> {
+  const bridge = getBridge()
+  if (!bridge || !bridge.store) throw new Error('单文件库驱动不可用')
+  return bridge.store
 }

@@ -2,6 +2,9 @@
 
 import type { CategoryCode, ClauseBlock, RiskFlag } from '../types'
 import { COMMON_RULES } from './rulePack.common'
+import { DECORATION_RULES } from './rulePack.decoration'
+import { DRIVING_RULES } from './rulePack.driving'
+import { HOUSE_RULES } from './rulePack.house'
 import { COMMON_V1_RULES } from './rulePack.common.v1'
 import { INJURY_RULES } from './rulePack.injury'
 import { INJURY_V1_RULES } from './rulePack.injury.v1'
@@ -35,6 +38,9 @@ export const RULES: Rule[] = [
   ...NDA_V1_RULES,
   ...SERVICE_RULES,
   ...SERVICE_V1_RULES,
+  ...HOUSE_RULES,
+  ...DECORATION_RULES,
+  ...DRIVING_RULES,
   ...COMMON_RULES,
   ...COMMON_V1_RULES,
 ]

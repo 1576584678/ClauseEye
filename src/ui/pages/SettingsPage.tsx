@@ -4,6 +4,7 @@ import { isDesktop, keychainBridge, ocrBridge } from '../../desktop/bridge'
 import { updateHeadline, updaterActions, useUpdaterState } from '../../desktop/updaterStore'
 import { testByokConnection } from '../../llm/byok'
 import { useApp } from '../../state/store'
+import { storeInfo } from '../../storage/db'
 import { vault } from '../../storage/vault'
 import { Disclaimer } from '../components/Common'
 import { Icon } from '../components/Icon'
@@ -19,6 +20,7 @@ export function SettingsPage() {
   const [confirmWipe, setConfirmWipe] = useState(false)
   const [keychainReady, setKeychainReady] = useState<boolean | null>(null)
   const [ocrReady, setOcrReady] = useState<boolean | null>(null)
+  const [store, setStore] = useState<{ driver: string; file?: string } | null>(null)
   const update = useUpdaterState()
   const [checkingUpdate, setCheckingUpdate] = useState(false)
 
@@ -29,6 +31,9 @@ export function SettingsPage() {
     })
     void ocrBridge.available().then((ok) => {
       if (!cancelled) setOcrReady(ok)
+    })
+    void storeInfo().then((info) => {
+      if (!cancelled) setStore(info)
     })
     return () => {
       cancelled = true
@@ -185,7 +190,7 @@ export function SettingsPage() {
                 ? '浏览器环境没有系统钥匙串，无法开启。'
                 : keychainReady === false
                   ? '当前系统未提供可用的加密能力（safeStorage 不可用）。'
-                  : '无口令模式下，主密钥用 Windows DPAPI / macOS 钥匙串加密后再落盘；即使 IndexedDB 文件被拷走也解不开。'}
+                  : '无口令模式下，主密钥用 Windows DPAPI / macOS 钥匙串加密后再落盘；即使库文件被拷走也解不开。'}
             </span>
           </span>
         </label>
@@ -236,7 +241,9 @@ export function SettingsPage() {
           </button>
         </div>
         <p className="muted small">
-          数据位置：浏览器 IndexedDB（本机）。清除浏览器站点数据或点击上方按钮都会造成不可恢复的删除，请定期导出备份。
+          {store?.driver === 'sqlite'
+            ? `数据位置：单文件加密库 ${store.file ?? ''}（AES-256-GCM 逐条加密，可直接整体备份 / 迁移）。点击上方按钮会造成不可恢复的删除，请定期导出备份。`
+            : '数据位置：浏览器 IndexedDB（本机）。清除浏览器站点数据或点击上方按钮都会造成不可恢复的删除，请定期导出备份。'}
         </p>
       </section>
 

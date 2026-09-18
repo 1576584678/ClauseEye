@@ -342,7 +342,7 @@ async function showDataLocation() {
     type: 'question',
     title: '数据存放位置',
     message: '你的加密保险箱存放在：',
-    detail: `${dir}\n\n可以通过「设置 → 导出备份」把数据另存到别处。`,
+    detail: `${dir}\n\n文档密文保存在 ${path.join(dir, 'vault.sqlite')}（单文件，可整体备份）；也可以通过「设置 → 导出备份」把数据另存到别处。`,
     buttons: ['打开文件夹', '好'],
     defaultId: 0,
     cancelId: 1,
@@ -435,6 +435,27 @@ function setUpdater() {
   })
 }
 
+// ---- 加密单文件保险箱（node:sqlite）：只存渲染进程加密好的密文 ----
+let vaultStore = null
+
+function getVaultStore() {
+  if (!vaultStore) {
+    const { createVaultStore } = require('./vaultStore.cjs')
+    vaultStore = createVaultStore({ file: path.join(app.getPath('userData'), 'vault.sqlite') })
+  }
+  return vaultStore
+}
+
+function vaultStoreStatus() {
+  try {
+    const { isAvailable } = require('./vaultStore.cjs')
+    if (!isAvailable()) return { available: false, reason: 'node:sqlite 不可用' }
+    return { available: true, ...getVaultStore().status() }
+  } catch (error) {
+    return { available: false, reason: String((error && error.message) || error) }
+  }
+}
+
 function registerIpc() {
   // ---- 桌面壳行为：托盘常驻 / 开机自启（设置页与托盘菜单共用同一份偏好）----
   ipcMain.handle('shell:prefs', () => shellPrefsView())
@@ -516,6 +537,17 @@ function registerIpc() {
       return false
     }
   })
+
+  // ---- 加密单文件保险箱：存储层驱动（SQLCipher 等价，零原生依赖）----
+  ipcMain.handle('store:status', () => vaultStoreStatus())
+  ipcMain.handle('store:records:put', (_event, row) => getVaultStore().putRecord(row))
+  ipcMain.handle('store:records:get', (_event, id) => getVaultStore().getRecord(id))
+  ipcMain.handle('store:records:all', () => getVaultStore().getAllRecords())
+  ipcMain.handle('store:records:delete', (_event, id) => getVaultStore().deleteRecord(id))
+  ipcMain.handle('store:records:clear', () => getVaultStore().clearRecords())
+  ipcMain.handle('store:meta:put', (_event, key, value) => getVaultStore().putMeta(key, value))
+  ipcMain.handle('store:meta:get', (_event, key) => getVaultStore().getMeta(key))
+  ipcMain.handle('store:meta:clear', () => getVaultStore().clearMeta())
 
   // ---- 应用更新 ----
   ipcMain.handle('updater:status', () => ({
@@ -661,6 +693,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('before-quit', () => {
     isQuitting = true
+    if (vaultStore) vaultStore.close()
   })
 
   app.on('window-all-closed', () => {
@@ -671,7 +704,7 @@ if (!app.requestSingleInstanceLock()) {
 /* ---------------- 冒烟自检 ---------------- */
 
 /**
- * 在无人工干预的情况下验证：页面渲染、资源可加载、IndexedDB 可用、
+ * 在无人工干预的情况下验证：页面渲染、资源可加载、单文件加密库（node:sqlite）可读写、
  * 模块 Worker（pdfjs 解析器）能在 app:// 源下创建。
  * 任何一项失败都会以非 0 退出码结束，方便 CI 卡住回归。
  */
@@ -746,6 +779,27 @@ async function runSmokeChecks(win) {
         const bridge = window.clauseEye || null
         out.bridge = bridge ? 'ok' : 'missing'
         if (bridge) {
+          out.store = await bridge.store
+            .status()
+            .then((value) => (value && value.available ? 'ok' : 'unavailable'))
+            .catch((error) => 'throw:' + error.name)
+          out.storeFile = await bridge.store
+            .status()
+            .then((value) => String((value && value.file) || ''))
+            .catch(() => '')
+          out.storeRoundtrip = await (async () => {
+            try {
+              const id = '__clauseeye_smoke__'
+              await bridge.store.putRecord({ id, sealed: { v: 1, iv: 'c21tb2tl', ct: 'c21tb2tl' }, updatedAt: new Date().toISOString() })
+              const row = await bridge.store.getRecord(id)
+              const written = Boolean(row && row.sealed && row.sealed.ct === 'c21tb2tl')
+              await bridge.store.deleteRecord(id)
+              const gone = await bridge.store.getRecord(id)
+              return written && !gone ? 'ok' : 'bad'
+            } catch (error) {
+              return 'throw:' + error.name
+            }
+          })()
           out.keychain = await bridge.keychain.available()
           out.notifications = await bridge.reminders.supported()
           out.ocrAvailable = await bridge.ocr.available()
@@ -798,6 +852,12 @@ async function runSmokeChecks(win) {
       }
       if (result.traversal === 200) failures.push('目录穿越未被拦截')
       if (result.idbOpen !== 'ok') failures.push(`IndexedDB 不可用（${result.idbOpen}）`)
+      if (result.bridge === 'ok' && result.store !== 'ok') {
+        failures.push(`单文件加密库不可用（${result.store}）`)
+      }
+      if (result.bridge === 'ok' && result.storeRoundtrip !== 'ok') {
+        failures.push(`单文件加密库读写异常（${result.storeRoundtrip}）`)
+      }
       if (result.moduleWorker !== 'ok') failures.push(`模块 Worker 不可用（${result.moduleWorker}）`)
       if (result.bridge !== 'ok') failures.push('桌面桥接（preload）未注入')
       if (!['installer', 'portable', 'dev'].includes(String(result.updater))) {

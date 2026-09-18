@@ -4,7 +4,7 @@ import { CATEGORY_MAP } from '../classify'
 import { clauseAt, expandToSentence } from '../text'
 import type { CategoryCode, ClauseBlock, RiskFlag, RulePackId, Severity } from '../types'
 
-export const RULES_VERSION = '0.2.0-v1'
+export const RULES_VERSION = '0.6.0-v1'
 
 /** 命中项可覆盖的部分（位置与引用由引擎计算，不允许覆盖） */
 export type RuleMatchOverride = Partial<Pick<RuleMatch, 'severity' | 'reason' | 'suggestion' | 'clauseIndex'>>
