@@ -6,6 +6,7 @@
  * - 钥匙串：借操作系统钥匙串（Windows DPAPI / macOS Keychain）加密保存保险箱主密钥
  * - OCR：把图片交给主进程的本地 tesseract.js 引擎识别（全程离线）
  * - 更新：检查/下载/安装新版本（只读取版本号与发布说明，不上传任何本地数据）
+ * - 桌面壳：托盘常驻 / 开机自启（关掉窗口也能继续到期提醒）
  *
  * 渲染进程仍保持 sandbox + contextIsolation，页面里拿不到 Node / fs。
  */
@@ -49,6 +50,17 @@ contextBridge.exposeInMainWorld('clauseEye', {
       const listener = () => handler()
       ipcRenderer.on('updater:open-settings', listener)
       return () => ipcRenderer.removeListener('updater:open-settings', listener)
+    },
+  },
+
+  shell: {
+    prefs: () => ipcRenderer.invoke('shell:prefs'),
+    setPrefs: (patch) => ipcRenderer.invoke('shell:set-prefs', patch),
+    showWindow: () => ipcRenderer.invoke('shell:show-window'),
+    onPrefs: (handler) => {
+      const listener = (_event, value) => handler(value)
+      ipcRenderer.on('shell:prefs', listener)
+      return () => ipcRenderer.removeListener('shell:prefs', listener)
     },
   },
 

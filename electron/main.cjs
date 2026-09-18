@@ -9,7 +9,7 @@
  *    页面里能跑的代码和浏览器里完全一致，没有额外的本地能力入口。
  * 3. 任何外链、外部导航一律交给系统默认浏览器，应用窗口本身不联网。
  */
-const { app, BrowserWindow, Menu, Notification, dialog, ipcMain, protocol, safeStorage, shell } = require('electron')
+const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, protocol, safeStorage, shell } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 
@@ -20,6 +20,11 @@ const DIST_DIR = path.join(__dirname, '..', 'dist')
 const INDEX_FILE = path.join(DIST_DIR, 'index.html')
 const ICON_FILE = path.join(__dirname, '..', 'build', 'icon.png')
 const PRELOAD_FILE = path.join(__dirname, 'preload.cjs')
+
+const shellPrefs = require('./shellPrefs.cjs')
+
+/** 偏好文件按 userData 计算，必须在 app.setName('ClauseEye') 之后取值，因此用函数延迟 */
+const prefFile = () => path.join(app.getPath('userData'), 'preferences.json')
 
 /** 开发模式：CLAUSEEYE_DEV_URL=http://localhost:5173 npm run electron:dev */
 const DEV_URL = process.env.CLAUSEEYE_DEV_URL || ''
@@ -47,6 +52,149 @@ protocol.registerSchemesAsPrivileged([
 /** @type {BrowserWindow | null} */
 let mainWindow = null
 
+/** 托盘与「关闭窗口是否退出」的状态（在 whenReady 里从 preferences.json 读入） */
+let prefs = { ...shellPrefs.DEFAULT_PREFS }
+/** @type {Tray | null} */
+let tray = null
+let trayAvailable = false
+/** 真正退出时置为 true，用来区分「关闭窗口」和「退出应用」 */
+let isQuitting = false
+/** 开机自启时静默启动（--hidden）：只留托盘，不弹主窗口 */
+const START_HIDDEN = process.argv.includes(shellPrefs.HIDDEN_FLAG)
+
+/* ---------------- 托盘常驻与开机自启 ---------------- */
+
+/** 渲染进程能看到的偏好快照（只读，修改一律走 updatePrefs） */
+function shellPrefsView() {
+  return {
+    keepInTray: prefs.keepInTray,
+    autoLaunch: prefs.autoLaunch,
+    /** 托盘在当前系统不可用时，"关闭窗口留在托盘"会被自动忽略 */
+    trayAvailable,
+    autoLaunchSupported: Boolean(shellPrefs.autoLaunchMechanism(process.platform)),
+    platform: process.platform,
+  }
+}
+
+/** 把主窗口显示到最前（托盘点击、通知点击都用它） */
+function showMainWindow(hash) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    mainWindow = createWindow()
+    return
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+  if (hash) void mainWindow.loadURL(`${DEV_URL || `${ORIGIN}/index.html`}${hash}`)
+}
+
+function refreshTrayMenu() {
+  if (!tray) return
+  const template = [
+    { label: '打开主界面', click: () => showMainWindow() },
+    {
+      label: '检查更新',
+      click: () => {
+        showMainWindow('#/settings')
+        if (updater) void updater.check()
+      },
+    },
+    { type: 'separator' },
+    {
+      label: '关闭窗口时留在托盘',
+      type: 'checkbox',
+      checked: prefs.keepInTray,
+      click: (item) => void updatePrefs({ keepInTray: item.checked }),
+    },
+    {
+      label: '开机自动启动',
+      type: 'checkbox',
+      checked: prefs.autoLaunch,
+      enabled: Boolean(shellPrefs.autoLaunchMechanism(process.platform)),
+      click: (item) => void updatePrefs({ autoLaunch: item.checked }),
+    },
+    { type: 'separator' },
+    {
+      label: '退出 ClauseEye',
+      click: () => {
+        isQuitting = true
+        app.quit()
+      },
+    },
+  ]
+  tray.setContextMenu(Menu.buildFromTemplate(template))
+}
+
+function createTray() {
+  if (SMOKE) return
+  try {
+    tray = new Tray(ICON_FILE)
+    tray.setToolTip('ClauseEye · 契眼')
+    tray.on('click', () => showMainWindow())
+    tray.on('double-click', () => showMainWindow())
+    trayAvailable = true
+    refreshTrayMenu()
+  } catch (error) {
+    tray = null
+    trayAvailable = false
+    process.stdout.write(`托盘不可用，保持默认的"关闭窗口即退出"：${error && error.message}\n`)
+  }
+}
+
+/** 开机自启：Windows / macOS 用系统登录项，Linux 写 autostart .desktop */
+function applyAutoLaunch(enabled) {
+  const mechanism = shellPrefs.autoLaunchMechanism(process.platform)
+  if (!mechanism) return
+  try {
+    if (mechanism === 'login-item') {
+      app.setLoginItemSettings(shellPrefs.loginItemSettings(enabled, process.platform))
+      return
+    }
+    const entryFile = shellPrefs.autostartFilePath(app.getPath('home'))
+    if (enabled) {
+      fs.mkdirSync(path.dirname(entryFile), { recursive: true })
+      fs.writeFileSync(
+        entryFile,
+        shellPrefs.autostartDesktopEntry({
+          execPath: process.execPath,
+          appImagePath: process.env.APPIMAGE || '',
+        }),
+        'utf8',
+      )
+    } else {
+      fs.rmSync(entryFile, { force: true })
+    }
+  } catch (error) {
+    process.stdout.write(`设置开机自启失败：${error && error.message}\n`)
+  }
+}
+
+/** 修改偏好：落盘 → 生效 → 刷新托盘菜单 → 通知渲染进程 */
+function updatePrefs(patch) {
+  const next = shellPrefs.normalizePrefs({ ...prefs, ...(patch && typeof patch === 'object' ? patch : {}) })
+  const autoLaunchChanged = next.autoLaunch !== prefs.autoLaunch
+  const trayChanged = next.keepInTray !== prefs.keepInTray
+  prefs = shellPrefs.writePrefs(prefFile(), next)
+  if (autoLaunchChanged) applyAutoLaunch(prefs.autoLaunch)
+  if (trayChanged) refreshTrayMenu()
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('shell:prefs', shellPrefsView())
+  return shellPrefsView()
+}
+
+/** 第一次退到托盘时提示一次：关闭窗口 ≠ 退出应用 */
+function notifyTrayHint() {
+  if (prefs.trayHintShown) return
+  updatePrefs({ trayHintShown: true })
+  if (!Notification.isSupported()) return
+  const notification = new Notification({
+    title: 'ClauseEye 仍在后台运行',
+    body: '关闭窗口不会退出应用，到期提醒仍会按时弹出；右键托盘图标可以退出。',
+    ...(fs.existsSync(ICON_FILE) ? { icon: ICON_FILE } : {}),
+  })
+  notification.on('click', () => showMainWindow())
+  notification.show()
+}
+
 function createWindow() {
   const smoke = SMOKE
 
@@ -72,6 +220,8 @@ function createWindow() {
 
   win.once('ready-to-show', () => {
     if (SMOKE) return
+    // 开机自启（--hidden）时静默启动；托盘不可用时仍然弹窗口，避免启动了却看不见
+    if (START_HIDDEN && trayAvailable) return
     win.show()
   })
 
@@ -94,6 +244,15 @@ function createWindow() {
 
   const target = DEV_URL ? `${DEV_URL}/#/vault` : `${ORIGIN}/index.html#/vault`
   win.loadURL(target)
+
+  // 关闭窗口：默认收进托盘继续跑（提醒才有意义），真正退出走「退出」菜单项
+  win.on('close', (event) => {
+    if (isQuitting) return
+    if (!shellPrefs.shouldKeepInTray(prefs, { trayAvailable, smoke: SMOKE })) return
+    event.preventDefault()
+    win.hide()
+    notifyTrayHint()
+  })
 
   win.on('closed', () => {
     mainWindow = null
@@ -277,6 +436,14 @@ function setUpdater() {
 }
 
 function registerIpc() {
+  // ---- 桌面壳行为：托盘常驻 / 开机自启（设置页与托盘菜单共用同一份偏好）----
+  ipcMain.handle('shell:prefs', () => shellPrefsView())
+  ipcMain.handle('shell:set-prefs', (_event, patch) => updatePrefs(patch))
+  ipcMain.handle('shell:show-window', () => {
+    showMainWindow()
+    return true
+  })
+
   ipcMain.handle('reminders:supported', () => Notification.isSupported())
 
   ipcMain.handle('reminders:notify', (_event, notice) => {
@@ -476,15 +643,24 @@ if (!app.requestSingleInstanceLock()) {
       return
     }
 
+    prefs = shellPrefs.readPrefs(prefFile())
     registerAppProtocol()
     registerIpc()
     setUpdater()
     buildMenu()
+    createTray()
     mainWindow = createWindow()
+    // 自启开关是持久化偏好，启动时把系统登录项 / 自启文件对齐一次
+    if (prefs.autoLaunch) applyAutoLaunch(true)
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
+      else showMainWindow()
     })
+  })
+
+  app.on('before-quit', () => {
+    isQuitting = true
   })
 
   app.on('window-all-closed', () => {
@@ -574,6 +750,10 @@ async function runSmokeChecks(win) {
           out.notifications = await bridge.reminders.supported()
           out.ocrAvailable = await bridge.ocr.available()
           out.updater = (await bridge.updater.status()).mode
+          out.shellPrefs = await bridge.shell
+            .prefs()
+            .then((value) => (typeof value.keepInTray === 'boolean' ? 'ok' : 'bad'))
+            .catch((error) => 'throw:' + error.name)
           if (out.ocrAvailable) {
             const canvas = document.createElement('canvas')
             canvas.width = 700
@@ -622,6 +802,9 @@ async function runSmokeChecks(win) {
       if (result.bridge !== 'ok') failures.push('桌面桥接（preload）未注入')
       if (!['installer', 'portable', 'dev'].includes(String(result.updater))) {
         failures.push(`更新器形态异常（${result.updater}）`)
+      }
+      if (result.bridge === 'ok' && result.shellPrefs !== 'ok') {
+        failures.push(`桌面壳偏好接口异常（${result.shellPrefs}）`)
       }
       if (result.bridge === 'ok' && result.ocrAvailable && !String(result.ocr).includes('劳动合同')) {
         failures.push(`本地 OCR 未识别出预期文字（${result.ocr}）`)

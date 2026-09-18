@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CategoryCode, KeyDate } from '../../core/types'
 import type { PlannedReminder } from '../../core/reminders'
-import { isDesktop, reminderBridge } from '../../desktop/bridge'
+import { isDesktop, reminderBridge, shellBridge, type ShellPrefs } from '../../desktop/bridge'
 import {
   clearNotifiedLog,
   loadNotifiedLog,
@@ -32,6 +32,7 @@ export function RemindersPage() {
   const { documents, settings, updateSettings, notify } = useApp()
   const [supported, setSupported] = useState(false)
   const [logVersion, setLogVersion] = useState(0)
+  const [shell, setShell] = useState<ShellPrefs | null>(null)
 
   const desktop = isDesktop()
 
@@ -42,6 +43,19 @@ export function RemindersPage() {
     })
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  // 桌面壳偏好（托盘常驻 / 开机自启）由主进程持有，这里读一份用于展示
+  useEffect(() => {
+    let cancelled = false
+    void shellBridge.prefs().then((value) => {
+      if (!cancelled) setShell(value)
+    })
+    const off = shellBridge.onPrefs((value) => setShell(value))
+    return () => {
+      cancelled = true
+      off()
     }
   }, [])
 
@@ -140,6 +154,44 @@ export function RemindersPage() {
             ))}
           </select>
         </label>
+
+        <label className="switch-row">
+          <input
+            type="checkbox"
+            checked={shell?.keepInTray ?? false}
+            disabled={!desktop || !shell?.trayAvailable}
+            onChange={(e) => {
+              void shellBridge.setPrefs({ keepInTray: e.target.checked }).then(setShell)
+            }}
+          />
+          <span>
+            <strong>关闭窗口后留在托盘继续运行</strong>
+            <span className="muted small">
+              关闭窗口不退出应用，提醒仍会按时弹出；右键托盘图标可打开主界面或退出。关闭此项则关掉窗口即退出。
+            </span>
+          </span>
+        </label>
+
+        <label className="switch-row">
+          <input
+            type="checkbox"
+            checked={shell?.autoLaunch ?? false}
+            disabled={!desktop || !shell?.autoLaunchSupported}
+            onChange={(e) => {
+              void shellBridge.setPrefs({ autoLaunch: e.target.checked }).then(setShell)
+            }}
+          />
+          <span>
+            <strong>开机自动启动（静默进入托盘）</strong>
+            <span className="muted small">
+              随系统启动并只留在托盘，不弹窗口；这样即使没打开应用也能收到到期提醒。系统里可随时关闭。
+            </span>
+          </span>
+        </label>
+
+        {desktop && shell && !shell.trayAvailable ? (
+          <p className="muted small">当前系统的托盘不可用，关闭窗口将直接退出应用（提醒只在应用运行时生效）。</p>
+        ) : null}
 
         <div className="row gap">
           <button

@@ -21,19 +21,19 @@
 
 | 平台 | 文件 | 说明 |
 |---|---|---|
-| Windows | `ClauseEye-0.4.0-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
-| Windows | `ClauseEye-0.4.0-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
+| Windows | `ClauseEye-0.5.0-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
+| Windows | `ClauseEye-0.5.0-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
 | Windows | `ClauseEye-green-win-x64.zip` | 绿色版目录，解压后双击 `ClauseEye.exe`。若单文件版被 Windows 11「智能应用控制」拦截，请改用这个 |
-| macOS | `ClauseEye-0.4.0-mac-arm64.dmg` | Apple 芯片（M 系列）安装包；另附同架构 `.zip`（自动更新元数据载体） |
-| macOS | `ClauseEye-0.4.0-mac-x64.dmg` | Intel 芯片安装包 |
-| Linux | `ClauseEye-0.4.0-linux-x64.AppImage` | 免安装单文件：`chmod +x ClauseEye-*.AppImage` 后直接运行；支持应用内自动更新 |
-| Linux | `ClauseEye-0.4.0-linux-x64.deb` | Debian / Ubuntu 安装包：`sudo dpkg -i ClauseEye-*.deb` |
+| macOS | `ClauseEye-0.5.0-mac-arm64.dmg` | Apple 芯片（M 系列）安装包；另附同架构 `.zip`（自动更新元数据载体） |
+| macOS | `ClauseEye-0.5.0-mac-x64.dmg` | Intel 芯片安装包 |
+| Linux | `ClauseEye-0.5.0-linux-x86_64.AppImage` | 免安装单文件：`chmod +x ClauseEye-*.AppImage` 后直接运行；支持应用内自动更新 |
+| Linux | `ClauseEye-0.5.0-linux-amd64.deb` | Debian / Ubuntu 安装包：`sudo dpkg -i ClauseEye-*.deb` |
 
-当前版本 **0.4.0**（新增 macOS / Linux 打包：dmg + AppImage + deb；Windows 产物与之前一致）。
+当前版本 **0.5.0**（新增「关闭窗口后留在托盘 + 开机自启」，提醒不再依赖主窗口开着；扫描件 OCR 单次上限从 20 页提升到 120 页，并按批处理保持界面可响应）。
 
 数据默认存放在本机用户目录（Windows `%APPDATA%\ClauseEye\`、macOS `~/Library/Application Support/ClauseEye`、Linux `~/.config/ClauseEye`），全部本地加密。
 
-装好之后不用再管更新：**Windows 安装版与 Linux AppImage**启动 20 秒后会自动检查新版本，发现更新会在应用顶部弹出横幅，点一下就能下载并重启安装；也可以随时在「设置 → 软件更新」里手动检查。**便携版 / 绿色版 / macOS 版**无法自我替换文件，会弹系统通知提示你到本页下载新版本。
+桌面版默认**关闭窗口后留在托盘继续运行**（可在「提醒」页关掉），并可选开机自启；因此到期提醒不依赖主窗口开着。装好之后不用再管更新：**Windows 安装版与 Linux AppImage**启动 20 秒后会自动检查新版本，发现更新会在应用顶部弹出横幅，点一下就能下载并重启安装；也可以随时在「设置 → 软件更新」里手动检查。**便携版 / 绿色版 / macOS 版**无法自我替换文件，会弹系统通知提示你到本页下载新版本。
 
 **macOS 首次打开**：当前构建未做 Apple 开发者签名与公证，系统会提示「无法验证开发者」。在「访达」里**右键点图标 → 打开**（或执行 `xattr -dr com.apple.quarantine /Applications/ClauseEye.app`）即可运行。因为未签名，macOS 版只提示下载新版本，不做自动替换；将来接入 Apple Developer ID 签名与公证后可升级为自动更新。
 
@@ -64,8 +64,8 @@ npm run benchmark    # 规则库评测基准（召回 / 误报 / 引用可定位
 | 3 | 本地加密存储 | ✅ V1 | IndexedDB + WebCrypto AES-GCM；主密钥可由系统钥匙串（safeStorage）保护 |
 | 4 | 坑点清单 | ✅ V1 | **150 条规则**，输出「高/中/低 + 原文引用 + 通俗解释 + 修订建议 + 法条依据」，支持确认/标记误报 |
 | 5 | 多 Offer 对比 | ✅ | 15 个字段结构化抽取 → 对比矩阵（自动高亮最优/最差）+ 启发式评分排名 + 本地简评 |
-| 6 | 关键日期提醒 | ✅ V1 | 本地规则抽取关键日期 → 提前 N 天 / 到期 / 逾期各提醒一次，系统通知点击跳转 |
-| 7 | 离线 OCR | ✅ V1 | tesseract.js（WASM，主进程运行）+ 随包分发的中文/英文语言包，单页平均 0.5～2 秒 |
+| 6 | 关键日期提醒 | ✅ V1 | 本地规则抽取关键日期 → 提前 N 天 / 到期 / 逾期各提醒一次，系统通知点击跳转；关闭窗口后留在托盘（可选开机自启），提醒不依赖窗口开着 |
+| 7 | 离线 OCR | ✅ V1 | tesseract.js（WASM，主进程运行）+ 随包分发的中文/英文语言包，单页平均 0.5～2 秒；单次最多 120 页，每 20 页让出主线程保持界面可响应 |
 | 8 | 应用更新 | ✅ V1 | 安装版走 electron-updater 自动更新（检查 → 下载 → 重启安装）；便携版提示到发布页下载；启动后自动检查可关闭 |
 | 9 | 设置页 | ✅ V1 | BYOK 配置与连通性自检、离线模式、通知与提前天数、钥匙串开关、口令开关、更新检查、备份导出、一键清空 |
 
@@ -133,9 +133,9 @@ samples/            6 份虚构示例文档（同时被单测与评测基准用�
 ## 测试与自检
 
 ```bash
-npm test              # 62 项单测：文本解析、分类、规则命中、引用可定位、Offer 对比、防幻觉、提醒计划
+npm test              # 90 项单测：文本解析、分类、规则命中、引用可定位、Offer 对比、防幻觉、提醒计划、OCR 页数规划、桌面壳偏好
 npm run benchmark     # 评测基准：召回率 / 误报数 / 引用可定位率
-npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、IndexedDB、资源加载、Worker、preload 桥、OCR 端到端
+npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、IndexedDB、资源加载、Worker、preload 桥、桌面壳偏好、OCR 端到端
 ```
 
 回归保护重点：**所有命中引用必须能在原文中精确定位**、日期不得被误读为期限、通用规则不与场景规则重复报告、评测基准不得出现漏报与误报。
@@ -147,7 +147,7 @@ npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、IndexedDB、资
 | `docs/产品方案_PRD.md` | 产品定位、目标用户、功能清单、商业模式、竞品、路线图 |
 | `docs/设计文档.md` | 总体架构、技术选型、数据模型、坑点引擎、多 Offer 对比、隐私与安全设计、实现状态 |
 | `docs/MVP实现说明.md` | MVP（v0.1.0）的实现范围、关键决策与差异说明 |
-| `docs/V1实现说明.md` | V1（v0.2.0）的增量：规则库、评测基准、系统提醒、离线 OCR、系统钥匙串、自动更新、打包发布 |
+| `docs/V1实现说明.md` | V1（v0.2.0 起）的增量：规则库、评测基准、系统提醒（含托盘常驻 / 开机自启）、离线 OCR（长扫描件分页）、系统钥匙串、自动更新、打包发布 |
 
 ## 技术底座（开源轮子）
 
@@ -160,7 +160,7 @@ npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、IndexedDB、资
 
 ```bash
 git push origin main
-git tag v0.4.0 && git push origin v0.4.0   # 打 tag 即自动触发构建与发布
+git tag v0.5.0 && git push origin v0.5.0   # 打 tag 即自动触发构建与发布
 ```
 
 `.github/workflows/release.yml` 在 tag 推送后自动完成：
@@ -175,6 +175,6 @@ git tag v0.4.0 && git push origin v0.4.0   # 打 tag 即自动触发构建与发
 
 ## 状态
 
-✅ **V1 已完成**：150 条规则库 + 评测基准 + 系统级到期提醒 + 离线 OCR + 系统钥匙串 + Windows 安装版/便携版 + 自动更新。
+✅ **V1 已完成**：150 条规则库 + 评测基准 + 系统级到期提醒（含托盘常驻 / 开机自启）+ 离线 OCR（长扫描件按批处理）+ 系统钥匙串 + Windows/macOS/Linux 安装包 + 自动更新。
 
 下一步（v2）：多人协作复核、条款库云端增量更新（可选订阅）、私有同步。

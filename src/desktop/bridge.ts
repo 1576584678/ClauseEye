@@ -26,6 +26,19 @@ export interface UpdateState {
   checkedAt: string | null
 }
 
+/** 桌面壳行为偏好（托盘常驻 / 开机自启），由主进程持久化 */
+export interface ShellPrefs {
+  /** 关闭窗口时留在托盘继续运行（提醒依赖应用常驻） */
+  keepInTray: boolean
+  /** 开机自动启动（静默启动到托盘） */
+  autoLaunch: boolean
+  /** 当前系统托盘是否可用 */
+  trayAvailable: boolean
+  /** 当前系统是否支持开机自启 */
+  autoLaunchSupported: boolean
+  platform: string
+}
+
 export interface OcrResult {
   ok: boolean
   text?: string
@@ -52,6 +65,12 @@ interface ClauseEyeBridge {
   ocr: {
     available: () => Promise<boolean>
     recognize: (dataUrl: string, langs?: string[]) => Promise<OcrResult>
+  }
+  shell: {
+    prefs: () => Promise<ShellPrefs>
+    setPrefs: (patch: Partial<ShellPrefs>) => Promise<ShellPrefs>
+    showWindow: () => Promise<boolean>
+    onPrefs: (handler: (prefs: ShellPrefs) => void) => () => void
   }
   updater: {
     status: () => Promise<UpdateState>
@@ -153,6 +172,46 @@ export const keychainBridge = {
       return await bridge.keychain.clear()
     } catch {
       return false
+    }
+  },
+}
+
+/** 浏览器里没有托盘与开机自启，全部降级为不可用 */
+const WEB_SHELL_PREFS: ShellPrefs = {
+  keepInTray: false,
+  autoLaunch: false,
+  trayAvailable: false,
+  autoLaunchSupported: false,
+  platform: 'web',
+}
+
+/** 桌面壳行为：托盘常驻 + 开机自启（网页版一律返回不可用） */
+export const shellBridge = {
+  async prefs(): Promise<ShellPrefs> {
+    const bridge = getBridge()
+    if (!bridge) return WEB_SHELL_PREFS
+    try {
+      return { ...WEB_SHELL_PREFS, ...(await bridge.shell.prefs()) }
+    } catch {
+      return WEB_SHELL_PREFS
+    }
+  },
+  async setPrefs(patch: Partial<ShellPrefs>): Promise<ShellPrefs> {
+    const bridge = getBridge()
+    if (!bridge) return WEB_SHELL_PREFS
+    try {
+      return { ...WEB_SHELL_PREFS, ...(await bridge.shell.setPrefs(patch)) }
+    } catch {
+      return WEB_SHELL_PREFS
+    }
+  },
+  onPrefs(handler: (prefs: ShellPrefs) => void): () => void {
+    const bridge = getBridge()
+    if (!bridge) return () => undefined
+    try {
+      return bridge.shell.onPrefs((prefs) => handler({ ...WEB_SHELL_PREFS, ...prefs }))
+    } catch {
+      return () => undefined
     }
   },
 }

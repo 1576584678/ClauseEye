@@ -12,12 +12,13 @@ import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { PAGE_BREAK, normalizeText } from '../core/text'
 import { ocrBridge } from '../desktop/bridge'
+import { MAX_OCR_PAGES, isChunkBoundary, planOcrPages } from './ocrPlan'
 
 /** 中文（简体）+ 英文：足够覆盖国内合同与证明文书 */
 export const OCR_LANGS = ['chi_sim', 'eng']
 
-/** 单次导入最多识别多少页，避免一份 200 页 PDF 卡住界面 */
-export const MAX_OCR_PAGES = 20
+/** 单次导入的识别上限与分批策略见 ocrPlan.ts（默认 120 页 / 每 20 页让出一次主线程） */
+export { MAX_OCR_PAGES }
 
 /** 光栅化时图片的最长边（像素）。太小影响识别率，太大拖慢速度 */
 const MAX_RENDER_SIDE = 2200
@@ -90,13 +91,16 @@ export async function ocrPdf(
   const task = pdfjs.getDocument({ data: new Uint8Array(data), useSystemFonts: true })
   const doc = await task.promise
   const pageCount = doc.numPages
-  const limit = Math.min(pageCount, MAX_OCR_PAGES)
+  const plan = planOcrPages(pageCount)
+  const limit = plan.pages
   const pages: string[] = []
   const confidences: number[] = []
 
   try {
     for (let pageNo = 1; pageNo <= limit; pageNo++) {
-      options.onProgress?.(`OCR 识别中… 第 ${pageNo}/${limit} 页`)
+      options.onProgress?.(
+        `OCR 识别中… 第 ${pageNo}/${limit} 页（${Math.round((pageNo / limit) * 100)}%）`,
+      )
       const page = await doc.getPage(pageNo)
       const viewport = page.getViewport({ scale: 1 })
       const scale = Math.min(3, MAX_RENDER_SIDE / Math.max(viewport.width, viewport.height))
@@ -110,6 +114,12 @@ export async function ocrPdf(
       const { text, confidence } = await recognizeCanvas(canvas)
       pages.push(text)
       confidences.push(confidence)
+      // 及时释放这一页的渲染资源，长文档才不会把内存堆满
+      page.cleanup()
+      // 每识别完一批让出主线程：界面才能刷新进度，长扫描件不至于看起来卡死
+      if (isChunkBoundary(pageNo) && pageNo < limit) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      }
     }
   } finally {
     await task.destroy()
@@ -119,7 +129,13 @@ export async function ocrPdf(
   const warnings: string[] = [
     `已用本地 OCR 识别扫描件（平均置信度 ${Math.round(average)}%），关键数字与期限请人工复核。`,
   ]
-  if (pageCount > limit) warnings.push(`为避免长时间占用，本次只识别了前 ${limit} 页（共 ${pageCount} 页）。`)
+  if (plan.truncated) {
+    warnings.push(
+      `本次识别了前 ${limit} 页，还有 ${plan.omitted} 页未识别（单次上限 ${MAX_OCR_PAGES} 页）；可拆分后分批导入。`,
+    )
+  } else if (limit >= 60) {
+    warnings.push(`这是一份 ${limit} 页的长扫描件，识别耗时较长；如果只需要其中几页，建议拆分后再导入。`)
+  }
 
   return {
     text: normalizeText(pages.join(`\n${PAGE_BREAK}\n`)),
