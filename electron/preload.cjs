@@ -53,7 +53,9 @@ contextBridge.exposeInMainWorld('clauseEye', {
     check: () => ipcRenderer.invoke('updater:check'),
     download: () => ipcRenderer.invoke('updater:download'),
     install: () => ipcRenderer.invoke('updater:install'),
-    openDownloadPage: () => ipcRenderer.invoke('updater:open-download'),
+    openDownloadPage: (url) =>
+      ipcRenderer.invoke('updater:open-download', typeof url === 'string' && url ? { url } : undefined),
+    links: () => ipcRenderer.invoke('updater:links'),
     onEvent: (handler) => {
       const listener = (_event, state) => handler(state)
       ipcRenderer.on('updater:event', listener)

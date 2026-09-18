@@ -573,9 +573,14 @@ function registerIpc() {
 
   ipcMain.handle('updater:install', () => (updater ? updater.install() : false))
 
-  ipcMain.handle('updater:open-download', () => {
+  ipcMain.handle('updater:links', async () => (updater ? updater.links() : null))
+
+  ipcMain.handle('updater:open-download', (_event, payload) => {
+    // 只允许打开 GitHub Release 直链或白名单镜像拼出来的地址，其余一律退回发布页
+    const { isAllowedDownloadUrl } = require('./updater.cjs')
+    const requested = payload && typeof payload.url === 'string' ? payload.url : ''
     const page = (updater && updater.state.downloadPage) || 'https://github.com/1576584678/ClauseEye/releases/latest'
-    void shell.openExternal(page)
+    void shell.openExternal(isAllowedDownloadUrl(requested) ? requested : page)
     return true
   })
 
@@ -826,6 +831,10 @@ async function runSmokeChecks(win) {
           out.notifications = await bridge.reminders.supported()
           out.ocrAvailable = await bridge.ocr.available()
           out.updater = (await bridge.updater.status()).mode
+          out.downloadLinks = await bridge.updater
+            .links()
+            .then((value) => (value && Array.isArray(value.channels) ? 'ok' : 'bad'))
+            .catch((error) => 'throw:' + error.name)
           out.shellPrefs = await bridge.shell
             .prefs()
             .then((value) => (typeof value.keepInTray === 'boolean' ? 'ok' : 'bad'))
@@ -890,6 +899,9 @@ async function runSmokeChecks(win) {
       if (result.bridge !== 'ok') failures.push('桌面桥接（preload）未注入')
       if (!['installer', 'portable', 'dev'].includes(String(result.updater))) {
         failures.push(`更新器形态异常（${result.updater}）`)
+      }
+      if (result.bridge === 'ok' && result.downloadLinks !== 'ok') {
+        failures.push(`下载渠道接口异常（${result.downloadLinks}）`)
       }
       if (result.bridge === 'ok' && result.shellPrefs !== 'ok') {
         failures.push(`桌面壳偏好接口异常（${result.shellPrefs}）`)

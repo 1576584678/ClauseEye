@@ -16,6 +16,64 @@ const REPO = { owner: '1576584678', repo: 'ClauseEye' }
 const RELEASES_PAGE = `https://github.com/${REPO.owner}/${REPO.repo}/releases/latest`
 
 /**
+ * 国内直连 GitHub Releases 常常很慢：这里列出公共加速前缀（第三方服务，可用性随时会变）。
+ * 用法是把发布资产的完整直链原样拼接在前缀之后，例如
+ *   https://ghproxy.net/https://github.com/<owner>/<repo>/releases/download/v0.6.1/ClauseEye-0.6.1-win-x64-setup.exe
+ */
+const DOWNLOAD_MIRRORS = [
+  { id: 'ghproxy', label: 'ghproxy.net', prefix: 'https://ghproxy.net/' },
+  { id: 'ghproxy-com', label: 'gh-proxy.com', prefix: 'https://gh-proxy.com/' },
+  { id: 'ghfast', label: 'ghfast.top', prefix: 'https://ghfast.top/' },
+]
+
+/** Release 地址前缀：既用于拼直链，也用于校验渲染进程回传的地址 */
+const RELEASES_PREFIX = `https://github.com/${REPO.owner}/${REPO.repo}/releases/`
+
+/**
+ * 当前平台该下载哪个文件：按优先级给出候选正则。
+ * 命名与 .github/workflows/release.yml 里的产物保持一致。
+ */
+function assetPatterns(platform, arch) {
+  if (platform === 'win32') return [/win-x64-setup\.exe$/i, /win-x64-portable\.exe$/i, /green-win-x64\.zip$/i]
+  if (platform === 'darwin') {
+    return arch === 'arm64'
+      ? [/mac-arm64\.dmg$/i, /mac-arm64\.zip$/i]
+      : [/mac-x64\.dmg$/i, /mac-x64\.zip$/i]
+  }
+  if (platform === 'linux') return [/-linux-x86_64\.AppImage$/i, /-linux-amd64\.deb$/i]
+  return []
+}
+
+/** 从 Release 资产清单里挑出当前平台该下载的文件（纯函数，便于单测） */
+function pickPlatformAsset(assets, platform = process.platform, arch = process.arch) {
+  const list = Array.isArray(assets) ? assets : []
+  for (const pattern of assetPatterns(platform, arch)) {
+    const hit = list.find((asset) => asset && typeof asset.name === 'string' && pattern.test(asset.name))
+    if (hit) {
+      return { name: String(hit.name), url: String(hit.url || ''), size: Number(hit.size) || 0 }
+    }
+  }
+  return null
+}
+
+/** 直连 + 各镜像渠道；镜像只是把直链原样拼在前缀后面，不做任何改写 */
+function buildDownloadChannels(directUrl) {
+  const url = String(directUrl || '')
+  if (!url) return []
+  return [
+    { id: 'github', label: 'GitHub 直连', url },
+    ...DOWNLOAD_MIRRORS.map((mirror) => ({ id: mirror.id, label: mirror.label, url: mirror.prefix + url })),
+  ]
+}
+
+/** 只放行 GitHub Release 地址与白名单镜像拼出来的地址（渲染进程塞不了任意 URL） */
+function isAllowedDownloadUrl(url) {
+  const value = String(url || '')
+  if (value.startsWith(RELEASES_PREFIX)) return true
+  return DOWNLOAD_MIRRORS.some((mirror) => value.startsWith(mirror.prefix + RELEASES_PREFIX))
+}
+
+/**
  * 版本号比较（够用的 semver 子集）：
  * - 忽略 v 前缀，按数字段比较（0.10 > 0.9）
  * - 带预发布后缀（-beta.1）视为比同号正式版更旧，符合 semver 直觉
@@ -230,6 +288,58 @@ function createUpdater({ app, onEvent }) {
     }
   }
 
+  let releaseCache = { at: 0, value: null }
+
+  /** 拉取最新 Release 的资产清单（10 分钟缓存，匿名 API 限流友好） */
+  async function latestReleaseAssets() {
+    const now = Date.now()
+    if (releaseCache.value && now - releaseCache.at < 10 * 60 * 1000) return releaseCache.value
+    const response = await fetch(`https://api.github.com/repos/${REPO.owner}/${REPO.repo}/releases/latest`, {
+      headers: { 'User-Agent': `ClauseEye/${currentVersion}`, Accept: 'application/vnd.github+json' },
+    })
+    if (!response.ok) throw new Error(`GitHub API 返回 ${response.status}`)
+    const data = await response.json()
+    const value = {
+      version: String(data.tag_name || '').replace(/^v/i, ''),
+      page: typeof data.html_url === 'string' && data.html_url ? data.html_url : RELEASES_PAGE,
+      assets: Array.isArray(data.assets)
+        ? data.assets.map((asset) => ({
+            name: String(asset && asset.name ? asset.name : ''),
+            url: String(asset && asset.browser_download_url ? asset.browser_download_url : ''),
+            size: Number(asset && asset.size ? asset.size : 0) || 0,
+          }))
+        : [],
+    }
+    releaseCache = { at: now, value }
+    return value
+  }
+
+  /**
+   * 「下载加速」用：挑出当前平台该下载的文件，给出直连与镜像渠道。
+   * 网络或限流失败时只返回发布页兜底，不影响更新检查本身。
+   */
+  async function links() {
+    try {
+      const release = await latestReleaseAssets()
+      const asset = pickPlatformAsset(release.assets, process.platform, process.arch)
+      return {
+        version: release.version || state.version || null,
+        page: release.page,
+        asset,
+        channels: buildDownloadChannels(asset ? asset.url : ''),
+        message: '',
+      }
+    } catch (error) {
+      return {
+        version: state.version || null,
+        page: RELEASES_PAGE,
+        asset: null,
+        channels: [],
+        message: error instanceof Error ? error.message : String(error),
+      }
+    }
+  }
+
   return {
     get state() {
       return state
@@ -244,6 +354,7 @@ function createUpdater({ app, onEvent }) {
     check,
     download,
     install,
+    links,
     compareVersions,
   }
 }
@@ -255,5 +366,9 @@ module.exports = {
   hasUpdateMetadata,
   isPortableBuild,
   portableReasonMessage,
+  pickPlatformAsset,
+  buildDownloadChannels,
+  isAllowedDownloadUrl,
+  DOWNLOAD_MIRRORS,
   RELEASES_PAGE,
 }

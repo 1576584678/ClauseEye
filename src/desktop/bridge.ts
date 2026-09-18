@@ -26,6 +26,22 @@ export interface UpdateState {
   checkedAt: string | null
 }
 
+/** 下载加速渠道：直连 GitHub 或经第三方公共代理前缀转发 */
+export interface DownloadChannel {
+  id: string
+  label: string
+  url: string
+}
+
+/** 当前平台该下载的文件 + 各下载渠道（主进程按 Release 资产清单挑选） */
+export interface DownloadLinks {
+  version: string | null
+  page: string
+  asset: { name: string; url: string; size: number } | null
+  channels: DownloadChannel[]
+  message?: string
+}
+
 /** 桌面壳行为偏好（托盘常驻 / 开机自启），由主进程持久化 */
 export interface ShellPrefs {
   /** 关闭窗口时留在托盘继续运行（提醒依赖应用常驻） */
@@ -107,7 +123,8 @@ interface ClauseEyeBridge {
     check: () => Promise<UpdateState | null>
     download: () => Promise<UpdateState | null>
     install: () => Promise<boolean>
-    openDownloadPage: () => Promise<boolean>
+    openDownloadPage: (url?: string) => Promise<boolean>
+    links: () => Promise<DownloadLinks | null>
     onEvent: (handler: (state: UpdateState) => void) => () => void
     onOpenSettings: (handler: () => void) => () => void
   }
@@ -319,13 +336,23 @@ export const updaterBridge = {
       return false
     }
   },
-  async openDownloadPage(): Promise<boolean> {
+  async openDownloadPage(url?: string): Promise<boolean> {
     const bridge = getBridge()
     if (!bridge) return false
     try {
-      return await bridge.updater.openDownloadPage()
+      return await bridge.updater.openDownloadPage(url)
     } catch {
       return false
+    }
+  },
+  /** 「下载加速」用：当前平台该下载什么、直连与各镜像渠道 */
+  async links(): Promise<DownloadLinks | null> {
+    const bridge = getBridge()
+    if (!bridge) return null
+    try {
+      return await bridge.updater.links()
+    } catch {
+      return null
     }
   },
   onEvent(handler: (state: UpdateState) => void): () => void {

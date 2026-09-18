@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { RULES_VERSION } from '../../core/rules'
-import { isDesktop, keychainBridge, ocrBridge } from '../../desktop/bridge'
+import { isDesktop, keychainBridge, ocrBridge, type DownloadLinks } from '../../desktop/bridge'
 import { updateHeadline, updaterActions, useUpdaterState } from '../../desktop/updaterStore'
 import { testByokConnection } from '../../llm/byok'
 import { useApp } from '../../state/store'
@@ -23,6 +23,18 @@ export function SettingsPage() {
   const [store, setStore] = useState<{ driver: string; file?: string } | null>(null)
   const update = useUpdaterState()
   const [checkingUpdate, setCheckingUpdate] = useState(false)
+
+  const [linksOpen, setLinksOpen] = useState(false)
+  const [linksLoading, setLinksLoading] = useState(false)
+  const [downloadLinks, setDownloadLinks] = useState<DownloadLinks | null>(null)
+
+  async function loadDownloadLinks() {
+    setLinksOpen(true)
+    if (downloadLinks) return
+    setLinksLoading(true)
+    setDownloadLinks(await updaterActions.downloadLinks())
+    setLinksLoading(false)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -305,6 +317,51 @@ export function SettingsPage() {
           <button type="button" className="btn" onClick={() => void updaterActions.openDownloadPage()}>
             打开发布页
           </button>
+        </div>
+        <div className="download-accelerator">
+          {linksOpen ? (
+            <>
+              {linksLoading ? <p className="muted small">正在获取下载链接…</p> : null}
+              {downloadLinks && downloadLinks.asset ? (
+                <>
+                  <p className="muted small">
+                    当前平台：<code>{downloadLinks.asset.name}</code>
+                    {downloadLinks.asset.size > 0
+                      ? `（${(downloadLinks.asset.size / 1024 / 1024).toFixed(1)} MB）`
+                      : ''}
+                  </p>
+                  <div className="row gap">
+                    {downloadLinks.channels.map((channel) => (
+                      <button
+                        key={channel.id}
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={() => void updaterActions.openDownloadPage(channel.url)}
+                      >
+                        {channel.id === 'github' ? 'GitHub 直连' : `加速 ${channel.label}`}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="muted small">
+                    加速链接经第三方公共代理转发（ghproxy.net / gh-proxy.com / ghfast.top），可用性随时会变：一个打不开就换下一个，或改用直连。
+                    点击只是用系统浏览器打开下载地址，应用本身不会通过代理上传任何数据。
+                  </p>
+                </>
+              ) : null}
+              {!linksLoading && downloadLinks && !downloadLinks.asset ? (
+                <p className="muted small">
+                  {downloadLinks.message
+                    ? `没拿到下载链接（${downloadLinks.message}）`
+                    : '本次发布里没有匹配当前平台的文件'}
+                  ，请到发布页手动选择。
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <button type="button" className="btn btn-sm" onClick={() => void loadDownloadLinks()}>
+              国内下载加速
+            </button>
+          )}
         </div>
       </section>
 

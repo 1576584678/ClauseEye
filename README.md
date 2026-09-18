@@ -21,21 +21,23 @@
 
 | 平台 | 文件 | 说明 |
 |---|---|---|
-| Windows | `ClauseEye-0.6.1-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
-| Windows | `ClauseEye-0.6.1-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
+| Windows | `ClauseEye-0.7.0-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
+| Windows | `ClauseEye-0.7.0-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
 | Windows | `ClauseEye-green-win-x64.zip` | 绿色版目录，解压后双击 `ClauseEye.exe`。若单文件版被 Windows 11「智能应用控制」拦截，请改用这个 |
-| macOS | `ClauseEye-0.6.1-mac-arm64.dmg` | Apple 芯片（M 系列）安装包；另附同架构 `.zip`（自动更新元数据载体） |
-| macOS | `ClauseEye-0.6.1-mac-x64.dmg` | Intel 芯片安装包 |
-| Linux | `ClauseEye-0.6.1-linux-x86_64.AppImage` | 免安装单文件：`chmod +x ClauseEye-*.AppImage` 后直接运行；支持应用内自动更新 |
-| Linux | `ClauseEye-0.6.1-linux-amd64.deb` | Debian / Ubuntu 安装包：`sudo dpkg -i ClauseEye-*.deb` |
+| macOS | `ClauseEye-0.7.0-mac-arm64.dmg` | Apple 芯片（M 系列）安装包；另附同架构 `.zip`（自动更新元数据载体） |
+| macOS | `ClauseEye-0.7.0-mac-x64.dmg` | Intel 芯片安装包 |
+| Linux | `ClauseEye-0.7.0-linux-x86_64.AppImage` | 免安装单文件：`chmod +x ClauseEye-*.AppImage` 后直接运行；支持应用内自动更新 |
+| Linux | `ClauseEye-0.7.0-linux-amd64.deb` | Debian / Ubuntu 安装包：`sudo dpkg -i ClauseEye-*.deb` |
 
-> **下载慢？** 资源托管在 GitHub，国内直连可能较慢：可在下载链接前拼接公共加速前缀（第三方服务，可用性会变动）——`https://ghproxy.net/`、`https://gh-proxy.com/`、`https://ghfast.top/`，例如 `https://ghproxy.net/https://github.com/1576584678/ClauseEye/releases/download/v0.6.1/ClauseEye-0.6.1-win-x64-setup.exe`。
+> **下载慢？** 资源托管在 GitHub，国内直连可能较慢。两种办法：
+> 1. 用应用内的**加速下载**：安装版 / 便携版 / 绿色版打开「设置 → 软件更新 → 国内下载加速」，点一下就会挑出当前平台的文件，并给出 GitHub 直连与三个公共加速渠道；发现新版本时顶部横幅也会直接给出「加速下载」按钮。
+> 2. 手动在下载链接前拼接加速前缀（第三方服务，可用性会变动）——`https://ghproxy.net/`、`https://gh-proxy.com/`、`https://ghfast.top/`，例如 `https://ghproxy.net/https://github.com/1576584678/ClauseEye/releases/download/v0.7.0/ClauseEye-0.7.0-win-x64-setup.exe`。
 
-当前版本 **0.6.1**（规则库扩到 186 条并新增二手房买卖 / 装修合同 / 驾培协议三类场景；加密存储迁移为单文件库 `vault.sqlite`；**绿色版补齐离线 OCR 运行时并整体瘦身**——语言包只留中英两份、依赖按需裁剪，解压后体积更小）。
+当前版本 **0.7.0**（新增**应用内下载加速**：一键挑出当前平台安装包并给出国内镜像渠道，不用再手拼加速链接。延续 0.6.x 的能力：186 条规则库并含二手房买卖 / 装修合同 / 驾培协议三类场景、单文件加密库 `vault.sqlite`、补齐离线 OCR 运行时并整体瘦身的绿色版）。
 
 数据默认存放在本机用户目录（Windows `%APPDATA%\ClauseEye\`、macOS `~/Library/Application Support/ClauseEye`、Linux `~/.config/ClauseEye`），全部本地加密。
 
-桌面版默认**关闭窗口后留在托盘继续运行**（可在「提醒」页关掉），并可选开机自启；因此到期提醒不依赖主窗口开着。装好之后不用再管更新：**Windows 安装版与 Linux AppImage**启动 20 秒后会自动检查新版本，发现更新会在应用顶部弹出横幅，点一下就能下载并重启安装；也可以随时在「设置 → 软件更新」里手动检查。**便携版 / 绿色版 / macOS 版**无法自我替换文件，会弹系统通知提示你到本页下载新版本。
+桌面版默认**关闭窗口后留在托盘继续运行**（可在「提醒」页关掉），并可选开机自启；因此到期提醒不依赖主窗口开着。装好之后不用再管更新：**Windows 安装版与 Linux AppImage**启动 20 秒后会自动检查新版本，发现更新会在应用顶部弹出横幅，点一下就能下载并重启安装；也可以随时在「设置 → 软件更新」里手动检查。**便携版 / 绿色版 / macOS 版**无法自我替换文件，会弹系统通知提示你到本页下载新版本；觉得 GitHub 慢的话，横幅和设置页都提供**加速下载**。
 
 **macOS 首次打开**：当前构建未做 Apple 开发者签名与公证，系统会提示「无法验证开发者」。在「访达」里**右键点图标 → 打开**（或执行 `xattr -dr com.apple.quarantine /Applications/ClauseEye.app`）即可运行。因为未签名，macOS 版只提示下载新版本，不做自动替换；将来接入 Apple Developer ID 签名与公证后可升级为自动更新。
 
@@ -166,7 +168,7 @@ npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、单文件加密
 
 ```bash
 git push origin main
-git tag v0.6.1 && git push origin v0.6.1   # 打 tag 即自动触发构建与发布
+git tag v0.7.0 && git push origin v0.7.0   # 打 tag 即自动触发构建与发布
 ```
 
 `.github/workflows/release.yml` 在 tag 推送后自动完成：

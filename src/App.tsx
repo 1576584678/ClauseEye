@@ -77,11 +77,15 @@ function UpdateBanner({ update }: { update: ReturnType<typeof useUpdaterState> }
       ) : state === 'downloading' ? (
         <span className="muted small">{percent}%</span>
       ) : portable ? (
-        <button type="button" className="btn btn-sm btn-primary" onClick={() => void updaterActions.openDownloadPage()}>
-          去下载 v{version}
-        </button>
-      ) : (
-        <button type="button" className="btn btn-sm btn-primary" onClick={() => void updaterActions.download()}>
+        <>
+          <button type="button" className="btn btn-sm" onClick={() => void updaterActions.openAcceleratedDownload()}>
+            加速下载
+          </button>
+          <button type="button" className="btn btn-sm btn-primary" onClick={() => void updaterActions.openDownloadPage()}>
+            去下载 v{version}
+          </button>
+        </>
+      ) : (        <button type="button" className="btn btn-sm btn-primary" onClick={() => void updaterActions.download()}>
           下载更新
         </button>
       )}

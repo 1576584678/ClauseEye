@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useSyncExternalStore } from 'react'
-import { updaterBridge, type UpdateState } from './bridge'
+import { updaterBridge, type DownloadLinks, type UpdateState } from './bridge'
 
 const FALLBACK: UpdateState = {
   mode: 'unknown',
@@ -65,8 +65,18 @@ export const updaterActions = {
   async install(): Promise<boolean> {
     return updaterBridge.install()
   },
-  async openDownloadPage(): Promise<boolean> {
-    return updaterBridge.openDownloadPage()
+  async openDownloadPage(url?: string): Promise<boolean> {
+    return updaterBridge.openDownloadPage(url)
+  },
+  /** 当前平台该下载的文件 + 直连/镜像渠道（按需拉取，主进程侧有缓存） */
+  async downloadLinks(): Promise<DownloadLinks | null> {
+    return updaterBridge.links()
+  },
+  /** 顶部横幅的「加速下载」：优先打开第一个镜像渠道，拿不到链接就退回发布页 */
+  async openAcceleratedDownload(): Promise<boolean> {
+    const links = await updaterBridge.links()
+    const mirror = links && links.channels.find((channel) => channel.id !== 'github')
+    return updaterBridge.openDownloadPage(mirror ? mirror.url : undefined)
   },
 }
 
