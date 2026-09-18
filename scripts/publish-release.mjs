@@ -42,7 +42,10 @@ export const RELEASE_NOTES = [
   '**更新机制**：Windows 安装版与 Linux AppImage 启动 20 秒后（或打开设置页点「检查更新」）会读取本页的更新元数据判断版本，',
   '发现新版本会弹系统通知并在应用顶部提示，可一键下载并重启安装；便携版 / 绿色版 / macOS 版只做提示，不自动替换文件。',
   '',
-  '**V1 内容**：150 条中国法规则库（劳动/租房/Offer/离职/工伤/NDA/服务协议）、系统级到期提醒、系统钥匙串保护主密钥、离线 OCR（扫描件与图片识别，语言包随包分发）。',
+  '**下载慢？** 资源托管在 GitHub，国内直连可能较慢。可在下载链接前拼接公共加速前缀（第三方服务，可用性会变动）：`https://ghproxy.net/`、`https://gh-proxy.com/`、`https://ghfast.top/`，',
+  '例如 `https://ghproxy.net/https://github.com/1576584678/ClauseEye/releases/download/v{版号}/ClauseEye-{版号}-win-x64-setup.exe`。',
+  '',
+  '**V1 内容**：186 条中国法规则库（劳动 / 租房 / 二手房买卖 / 装修 / 驾培 / Offer / 离职 / 工伤 / NDA / 服务协议）、系统级到期提醒、系统钥匙串保护主密钥、单文件加密库（`vault.sqlite`）、离线 OCR（扫描件与图片识别，语言包随包分发）。',
   '',
   '数据默认存放在本机用户目录（Windows 为 `%APPDATA%\\ClauseEye\\`），全部本地加密，应用不连接任何自建服务。',
 ].join('\n')

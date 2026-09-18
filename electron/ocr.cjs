@@ -12,6 +12,9 @@ const path = require('node:path')
 
 const LANGS = ['chi_sim', 'eng']
 
+/** worker 初始化兜底超时：引擎起不来时宁可报错，也不能把界面挂住 */
+const WORKER_READY_TIMEOUT_MS = 90 * 1000
+
 /** 按语言组合缓存 Worker（tesseract.js 的单个 Worker 不能并发识别） */
 const workers = new Map()
 
@@ -74,7 +77,18 @@ function getWorker(langs) {
       options.langPath = langPath
       const corePath = resolveModuleFile('tesseract.js-core/tesseract-core-simd.wasm.js')
       if (corePath) options.corePath = corePath
-      return createWorker(langs, OEM.LSTM_ONLY, options)
+      // worker 脚本必须指向 asar 外的真实文件：worker_threads 读不了 app.asar 内的路径
+      const workerPath = resolveUnpacked(path.join(path.dirname(require.resolve('tesseract.js')), 'worker-script', 'node', 'index.js'))
+      if (fs.existsSync(workerPath)) options.workerPath = workerPath
+      let timer
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('本地 OCR 引擎初始化超时（90 秒），请重试或重新安装')), WORKER_READY_TIMEOUT_MS)
+      })
+      try {
+        return await Promise.race([createWorker(langs, OEM.LSTM_ONLY, options), timeout])
+      } finally {
+        clearTimeout(timer)
+      }
     })().catch((error) => {
       workers.delete(key)
       throw error

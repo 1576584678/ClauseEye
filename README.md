@@ -21,15 +21,17 @@
 
 | 平台 | 文件 | 说明 |
 |---|---|---|
-| Windows | `ClauseEye-0.5.0-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
-| Windows | `ClauseEye-0.5.0-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
+| Windows | `ClauseEye-0.6.1-win-x64-setup.exe` | **安装版（推荐）**：安装后可在应用内一键自动更新，以后无需再手动下载 |
+| Windows | `ClauseEye-0.6.1-win-x64-portable.exe` | 单文件便携版，双击直接运行；免安装版不能自我更新，新版本会提示你到 Releases 下载 |
 | Windows | `ClauseEye-green-win-x64.zip` | 绿色版目录，解压后双击 `ClauseEye.exe`。若单文件版被 Windows 11「智能应用控制」拦截，请改用这个 |
-| macOS | `ClauseEye-0.5.0-mac-arm64.dmg` | Apple 芯片（M 系列）安装包；另附同架构 `.zip`（自动更新元数据载体） |
-| macOS | `ClauseEye-0.5.0-mac-x64.dmg` | Intel 芯片安装包 |
-| Linux | `ClauseEye-0.5.0-linux-x86_64.AppImage` | 免安装单文件：`chmod +x ClauseEye-*.AppImage` 后直接运行；支持应用内自动更新 |
-| Linux | `ClauseEye-0.5.0-linux-amd64.deb` | Debian / Ubuntu 安装包：`sudo dpkg -i ClauseEye-*.deb` |
+| macOS | `ClauseEye-0.6.1-mac-arm64.dmg` | Apple 芯片（M 系列）安装包；另附同架构 `.zip`（自动更新元数据载体） |
+| macOS | `ClauseEye-0.6.1-mac-x64.dmg` | Intel 芯片安装包 |
+| Linux | `ClauseEye-0.6.1-linux-x86_64.AppImage` | 免安装单文件：`chmod +x ClauseEye-*.AppImage` 后直接运行；支持应用内自动更新 |
+| Linux | `ClauseEye-0.6.1-linux-amd64.deb` | Debian / Ubuntu 安装包：`sudo dpkg -i ClauseEye-*.deb` |
 
-当前版本 **0.5.0**（新增「关闭窗口后留在托盘 + 开机自启」，提醒不再依赖主窗口开着；扫描件 OCR 单次上限从 20 页提升到 120 页，并按批处理保持界面可响应）。
+> **下载慢？** 资源托管在 GitHub，国内直连可能较慢：可在下载链接前拼接公共加速前缀（第三方服务，可用性会变动）——`https://ghproxy.net/`、`https://gh-proxy.com/`、`https://ghfast.top/`，例如 `https://ghproxy.net/https://github.com/1576584678/ClauseEye/releases/download/v0.6.1/ClauseEye-0.6.1-win-x64-setup.exe`。
+
+当前版本 **0.6.1**（规则库扩到 186 条并新增二手房买卖 / 装修合同 / 驾培协议三类场景；加密存储迁移为单文件库 `vault.sqlite`；**绿色版补齐离线 OCR 运行时并整体瘦身**——语言包只留中英两份、依赖按需裁剪，解压后体积更小）。
 
 数据默认存放在本机用户目录（Windows `%APPDATA%\ClauseEye\`、macOS `~/Library/Application Support/ClauseEye`、Linux `~/.config/ClauseEye`），全部本地加密。
 
@@ -136,7 +138,7 @@ samples/            6 份虚构示例文档（同时被单测与评测基准用�
 ## 测试与自检
 
 ```bash
-npm test              # 91 项单测：文本解析、分类、规则命中（含二手房/装修/驾培）、引用可定位、Offer 对比、防幻觉、提醒计划、OCR 页数规划、桌面壳偏好
+npm test              # 97 项单测：文本解析、分类、规则命中（含二手房/装修/驾培）、引用可定位、Offer 对比、防幻觉、提醒计划、OCR 页数规划、桌面壳偏好
 npm run benchmark     # 评测基准：召回率 / 误报数 / 引用可定位率
 npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、单文件加密库读写、资源加载、Worker、preload 桥、桌面壳偏好、OCR 端到端
 ```
@@ -164,7 +166,7 @@ npm run electron:smoke  # 桌面壳冒烟自检：页面渲染、单文件加密
 
 ```bash
 git push origin main
-git tag v0.6.0 && git push origin v0.6.0   # 打 tag 即自动触发构建与发布
+git tag v0.6.1 && git push origin v0.6.1   # 打 tag 即自动触发构建与发布
 ```
 
 `.github/workflows/release.yml` 在 tag 推送后自动完成：

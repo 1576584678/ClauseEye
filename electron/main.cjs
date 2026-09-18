@@ -225,7 +225,11 @@ function createWindow() {
     win.show()
   })
 
-  if (SMOKE) runSmokeChecks(win)
+  if (SMOKE) {
+    // 冒烟自检的窗口是隐藏的，渲染进程的定时器会被冻结，必须关掉后台节流
+    win.webContents.setBackgroundThrottling(false)
+    runSmokeChecks(win)
+  }
 
   // 窗口标题固定，不随页面的 <title> 变
   win.on('page-title-updated', (event) => event.preventDefault())
@@ -711,12 +715,30 @@ if (!app.requestSingleInstanceLock()) {
 async function runSmokeChecks(win) {
   const errors = []
 
+  // 兜底：渲染进程若卡死，页面里的超时也不会触发（隐藏窗口定时器被冻结），
+  // 由主进程自己收场，避免 CI 与本地自检永久挂住。
+  const watchdog = setTimeout(() => {
+    const report = '\n[smoke] FAIL\n冒烟自检 180 秒内未完成，疑似卡死\n'
+    process.stdout.write(report)
+    const outFile = process.env.CLAUSEEYE_SMOKE_OUT
+    if (outFile) {
+      try {
+        fs.writeFileSync(outFile, report, 'utf8')
+      } catch {
+        /* ignore */
+      }
+    }
+    app.exit(1)
+  }, 180 * 1000)
+
   win.webContents.on('console-message', (...args) => {
     // Electron 37+ 传入单个事件对象，之前是 (event, level, message, ...)
     const evt = args[0]
     const level = typeof evt === 'object' && evt !== null && 'level' in evt ? evt.level : args[1]
     const message = typeof evt === 'object' && evt !== null && 'message' in evt ? evt.message : args[2]
     if (level === 'error' || level === 3) errors.push(String(message))
+    // 页面侧的分步进度（[smoke] 前缀）原样打到 stdout，便于定位卡在哪一步
+    else if (String(message).startsWith('[smoke]')) process.stdout.write(String(message) + '\n')
   })
 
   win.webContents.on('render-process-gone', (_event, details) => {
@@ -808,6 +830,7 @@ async function runSmokeChecks(win) {
             .prefs()
             .then((value) => (typeof value.keepInTray === 'boolean' ? 'ok' : 'bad'))
             .catch((error) => 'throw:' + error.name)
+          console.log('[smoke] 开始 OCR 端到端')
           if (out.ocrAvailable) {
             const canvas = document.createElement('canvas')
             canvas.width = 700
@@ -819,13 +842,18 @@ async function runSmokeChecks(win) {
             ctx.font = '32px "Microsoft YaHei", sans-serif'
             ctx.fillText('劳动合同试用期六个月', 20, 60)
             ctx.fillText('ClauseEye OCR', 20, 108)
-            const ocr = await bridge.ocr.recognize(canvas.toDataURL('image/png'), ['chi_sim', 'eng'])
+            const ocr = await Promise.race([
+              bridge.ocr.recognize(canvas.toDataURL('image/png'), ['chi_sim', 'eng']),
+              new Promise((resolve) => setTimeout(() => resolve({ ok: false, error: 'timeout' }), 120000)),
+            ])
+            console.log('[smoke] OCR 完成')
             out.ocr = ocr && ocr.ok ? String(ocr.text || '').replace(/\s+/g, '').slice(0, 40) : 'fail:' + ((ocr && ocr.error) || 'unknown')
           } else {
             out.ocr = 'unavailable'
           }
         }
 
+        console.log('[smoke] store/bridge 就绪')
         out.moduleWorker = await new Promise((resolve) => {
           const file = ${JSON.stringify(workerFile || '')}
           if (!file) return resolve('no-worker-asset')
@@ -887,6 +915,7 @@ async function runSmokeChecks(win) {
       }
     }
 
+    clearTimeout(watchdog)
     app.exit(failures.length === 0 ? 0 : 1)
   })
 }
