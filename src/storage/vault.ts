@@ -128,11 +128,22 @@ export class Vault {
       if (!meta.wrappedKey) throw new Error('保险箱元数据损坏（缺少 wrappedKey）')
       raw = fromBase64(await openSealed<string>(kek, meta.wrappedKey))
     } else {
-      const fromKeychain = meta.keychain ? await keychainBridge.load() : null
+      let fromKeychain: string | null = null
+      let keychainError: string | null = null
+      if (meta.keychain) {
+        try {
+          fromKeychain = await keychainBridge.load()
+        } catch (error) {
+          // 读钥匙串失败（如系统拒绝访问）不应直接卡死在解锁页，先记下原因再尝试回退明文密钥
+          keychainError = error instanceof Error ? error.message : String(error)
+        }
+      }
       if (fromKeychain) {
         raw = fromBase64(fromKeychain)
       } else if (meta.plainKey) {
         raw = fromBase64(meta.plainKey)
+      } else if (keychainError) {
+        throw new Error(keychainError)
       } else if (meta.keychain) {
         throw new Error('系统钥匙串里找不到该保险箱的密钥（可能换了系统账号或重装了系统）')
       } else {

@@ -22,6 +22,9 @@ export class ByokNotConfiguredError extends Error {
 
 const MAX_PROMPT_CHARS = 14000
 
+/** 仅本机回环地址允许使用明文 http（本地推理服务常见场景） */
+const LOCAL_HTTP = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/i
+
 interface ChatOptions {
   temperature?: number
   timeoutMs?: number
@@ -30,6 +33,10 @@ interface ChatOptions {
 function endpoint(baseUrl: string): string {
   const trimmed = baseUrl.trim().replace(/\/+$/, '')
   if (!trimmed) throw new Error('接口地址为空')
+  // 明文 http 会把 Authorization: Bearer 暴露在链路上，只放行本机回环地址
+  if (!/^https:\/\//i.test(trimmed) && !LOCAL_HTTP.test(trimmed)) {
+    throw new Error('接口地址必须使用 https（仅本机 localhost/127.0.0.1 可用 http），否则 API Key 会以明文传输')
+  }
   if (/\/chat\/completions$/.test(trimmed)) return trimmed
   return `${trimmed}/chat/completions`
 }

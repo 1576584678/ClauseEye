@@ -203,13 +203,18 @@ export const keychainBridge = {
       return false
     }
   },
+  /**
+   * 读取钥匙串中保存的主密钥。
+   * 返回 `null` 只表示「桥接不可用」或「确实没有保存过密钥」；
+   * 读取过程出错会抛出，避免调用方把「读失败」误判成「无密钥」而重建主密钥、导致既有保险箱永久无法解密。
+   */
   async load(): Promise<string | null> {
     const bridge = getBridge()
     if (!bridge) return null
     try {
       return await bridge.keychain.load()
-    } catch {
-      return null
+    } catch (error) {
+      throw new Error(`读取系统钥匙串失败：${error instanceof Error ? error.message : String(error)}`)
     }
   },
   async clear(): Promise<boolean> {
@@ -390,7 +395,8 @@ export const vaultStoreBridge = {
     }
   },
   async putRecord(row: VaultStoreRow): Promise<void> {
-    await storeApi().putRecord(row)
+    const ok = await storeApi().putRecord(row)
+    if (!ok) throw new Error('单文件库写入失败')
   },
   async getRecord(id: string): Promise<VaultStoreRow | undefined> {
     return storeApi().getRecord(id)

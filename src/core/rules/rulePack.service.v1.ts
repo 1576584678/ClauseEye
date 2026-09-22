@@ -142,7 +142,7 @@ export const SERVICE_V1_RULES: Rule[] = [
     detect(ctx) {
       return findMatches(
         ctx,
-        /(?:每|按)[^。；\n]{0,6}(?:日|天)[^。；\n]{0,16}(?:违约金|罚款|扣款|%\u0025|百分之[一二三四五六七八九十]+)/g,
+        /(?:每|按)[^。；\n]{0,6}(?:日|天)[^。；\n]{0,16}(?:违约金|罚款|扣款|\d+%|百分之[一二三四五六七八九十]+)/g,
         (m) => {
           const window = ctx.text.slice(Math.max(0, m.index - 60), m.index + 120)
           if (/(?:不超过|上限|封顶|最高)/.test(window)) return null

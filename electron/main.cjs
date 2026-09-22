@@ -30,6 +30,21 @@ const prefFile = () => path.join(app.getPath('userData'), 'preferences.json')
 const DEV_URL = process.env.CLAUSEEYE_DEV_URL || ''
 
 /**
+ * 与白名单地址做「协议 + 主机」精确比较。
+ * 不能用 url.startsWith(DEV_URL)：http://localhost:5173.evil.com 也满足前缀，
+ * 而 app://local 是非特殊协议，用 URL.origin 会退化成 "null"，故比较 protocol/host。
+ */
+function isSameOrigin(url, allowed) {
+  try {
+    const target = new URL(url)
+    const base = new URL(allowed)
+    return target.protocol === base.protocol && target.host === base.host
+  } catch {
+    return false
+  }
+}
+
+/**
  * 冒烟自检：CLAUSEEYE_SMOKE=1 electron .
  * 启动后检查页面是否渲染、IndexedDB 是否可用、worker 能否加载，然后自动退出。
  * 用于在没有人工点击的情况下验证打包结果（CI 也会跑）。
@@ -240,8 +255,7 @@ function createWindow() {
   })
 
   win.webContents.on('will-navigate', (event, url) => {
-    const allowed = DEV_URL ? url.startsWith(DEV_URL) : url.startsWith(ORIGIN)
-    if (allowed) return
+    if (isSameOrigin(url, DEV_URL || ORIGIN)) return
     event.preventDefault()
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
   })

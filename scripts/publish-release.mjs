@@ -176,10 +176,6 @@ async function uploadAsset(token, repo, release, asset) {
 }
 
 async function uploadWithRetry(token, repo, release, asset, attempts = 3) {
-  // 同名资产已存在时（历史上传残留）先删掉再传，等价于 gh 的 --clobber
-  const existing = (release.assets || []).find((item) => item.name === asset.name)
-  if (existing) await deleteAsset(token, repo, existing.id)
-
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const result = await uploadAsset(token, repo, release, asset)
@@ -235,10 +231,12 @@ async function main() {
   console.log(`→ 产物：${assets.map((item) => `${item.name}(${(item.size / 1024 / 1024).toFixed(1)}MB)`).join('、')}`)
   console.log(`→ 发布说明：${body.split('\n').length} 行${previousTag ? `（自 ${previousTag} 起 ${subjects.length} 条提交）` : ''}`)
 
-  if (options.dryRun || !token) {
-    console.log(options.dryRun ? '· dry-run：不实际发布' : '· 缺少 GITHUB_TOKEN：只打印计划，不实际发布')
+  if (options.dryRun) {
+    console.log('· dry-run：不实际发布')
     return
   }
+  // CI 里缺 token 会让"发布被静默跳过"看起来像成功，必须显式失败
+  if (!token) throw new Error('缺少 GITHUB_TOKEN（或 GH_TOKEN），无法发布到 GitHub Releases')
 
   const release = await ensureRelease(token, repo, tag, `ClauseEye ${tag}`, body)
 

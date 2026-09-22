@@ -125,8 +125,9 @@ export const OFFER_V1_RULES: Rule[] = [
         /试用期[^。；\n]{0,24}(?:工资|薪资|薪酬|待遇)[^。；\n]{0,20}/g,
         (m) => {
           if (/(?:另议|面议|另定|待定|以(?:公司)?规定为准|另行约定)/.test(m[0])) return {}
+          // 已写明具体数字视为明确，否则按"未明确"上报
           if (/\d/.test(m[0])) return null
-          return null
+          return {}
         },
       )
     },

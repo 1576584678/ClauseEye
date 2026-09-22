@@ -50,11 +50,14 @@ function labelFor(text: string, index: number): string {
 
 function kindOf(text: string, start: number, end: number): KeyDateKind {
   const tail = text.slice(end, end + 8)
-  if (/^\s*(?:前|之前|截止|以内|内)/.test(tail)) return 'deadline'
+  // 单字「内」需排除「内容/内部/内网」这类词，否则普通日期会被误判成截止日
+  if (/^\s*(?:前|之前|截止|以内|之内|内(?![容部网外存勤涵]))/.test(tail)) return 'deadline'
   if (/^\s*(?:止|为止|结束|届满|到期|后终止)/.test(tail)) return 'end'
   if (/^\s*(?:起|开始|生效)/.test(tail)) return 'start'
   const head = text.slice(Math.max(0, start - 6), start)
-  if (/(?:至|到|自)\s*$/.test(head)) return 'start'
+  if (/自\s*$/.test(head)) return 'start'
+  // 「至/到」后面跟的是区间结束日期，语义与「自」相反
+  if (/(?:至|到)\s*$/.test(head)) return 'end'
   return 'obligation'
 }
 
@@ -109,7 +112,8 @@ export function extractKeyDates(text: string, category?: CategoryCode): KeyDate[
     const kind = kindOf(text, start, end)
     const label = labelWithKind(labelFor(text, start), kind)
     out.push({ label, kind, date: iso, source: m[0].trim() })
-    if (!termStart) termStart = iso
+    // 只有明确的起始日才能当作期限起点，否则拿签订日/离职日/届满日去推算会整体偏移
+    if (!termStart && kind === 'start') termStart = iso
     if (kind === 'end' && !termEnd) termEnd = iso
   }
 

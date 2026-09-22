@@ -18,6 +18,9 @@ const WORKER_READY_TIMEOUT_MS = 90 * 1000
 /** 按语言组合缓存 Worker（tesseract.js 的单个 Worker 不能并发识别） */
 const workers = new Map()
 
+/** 每个语言组合一条串行队列：同一个 Worker 被并发调用会结果错乱甚至抛错 */
+const queues = new Map()
+
 /** asar 内路径 → asar.unpacked 真实路径（WASM 需要真实文件） */
 function resolveUnpacked(target) {
   const unpacked = target.replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`)
@@ -74,11 +77,20 @@ function getWorker(langs) {
       const workerPath = resolveUnpacked(path.join(path.dirname(require.resolve('tesseract.js')), 'worker-script', 'node', 'index.js'))
       if (fs.existsSync(workerPath)) options.workerPath = workerPath
       let timer
+      let expired = false
       const timeout = new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('本地 OCR 引擎初始化超时（90 秒），请重试或重新安装')), WORKER_READY_TIMEOUT_MS)
+        timer = setTimeout(() => {
+          expired = true
+          reject(new Error('本地 OCR 引擎初始化超时（90 秒），请重试或重新安装'))
+        }, WORKER_READY_TIMEOUT_MS)
       })
       try {
-        return await Promise.race([createWorker(langs, OEM.LSTM_ONLY, options), timeout])
+        const created = createWorker(langs, OEM.LSTM_ONLY, options)
+        // 超时后 createWorker 仍会继续跑完，迟到的 Worker 必须回收，否则进程内会泄漏一个 WASM 引擎
+        void created.then((worker) => {
+          if (expired) worker.terminate().catch(() => {})
+        })
+        return await Promise.race([created, timeout])
       } finally {
         clearTimeout(timer)
       }
@@ -96,9 +108,23 @@ function getWorker(langs) {
  * @returns {Promise<{ text: string, confidence: number }>}
  */
 async function recognize(image, langs = LANGS) {
-  const worker = await getWorker(langs.length ? langs : LANGS)
-  const { data } = await worker.recognize(image)
-  return { text: data.text || '', confidence: data.confidence ?? 0 }
+  const target = langs.length ? langs : LANGS
+  const worker = await getWorker(target)
+  // 同一个 Worker 串行排队：批量识别时才不会并发调用同一个 Worker
+  const key = target.join('+')
+  const previous = queues.get(key) ?? Promise.resolve()
+  const task = previous.then(async () => {
+    const { data } = await worker.recognize(image)
+    return { text: data.text || '', confidence: data.confidence ?? 0 }
+  })
+  queues.set(
+    key,
+    task.then(
+      () => undefined,
+      () => undefined,
+    ),
+  )
+  return task
 }
 
 async function dispose() {

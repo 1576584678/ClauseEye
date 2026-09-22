@@ -30,7 +30,8 @@ export function ImportPanel({ open, onClose }: { open: boolean; onClose: () => v
   const handleFiles = async (files: FileList | File[] | null) => {
     const list = files ? Array.from(files) : []
     if (list.length === 0) return
-    await importFiles(list, { ocr: useOcr })
+    // 环境没有内置 OCR 引擎时强制关闭，避免与界面提示自相矛盾
+    await importFiles(list, { ocr: useOcr && ocrReady !== false })
     onClose()
   }
 

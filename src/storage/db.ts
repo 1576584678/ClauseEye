@@ -124,12 +124,19 @@ async function migrateLegacyIndexedDb(): Promise<void> {
     }
     const [records, meta] = await Promise.all([idbGetAllRecords<VaultStoreRow>(), idbGetAllMeta()])
     const hasVault = (await vaultStoreBridge.getMeta('vault')) !== undefined
-    if (!hasVault) {
-      for (const row of records) await vaultStoreBridge.putRecord(row)
-      for (const row of meta) await vaultStoreBridge.putMeta(row.key, row.value)
+    if (hasVault) {
+      // 单文件库里已经有 vault 数据：无法判断旧库中是「已搬完的副本」还是
+      // 「上次迁移中途失败后的唯一副本」，因此绝不能清空 IndexedDB，否则可能永久丢数据。
+      if (records.length > 0 || meta.length > 0) {
+        console.warn(`[vault] 检测到旧 IndexedDB 中仍有 ${records.length} 条记录 / ${meta.length} 条元数据，已保留未清理`)
+      }
+      await vaultStoreBridge.putMeta(MIGRATION_FLAG, new Date().toISOString())
+      return
     }
+    for (const row of records) await vaultStoreBridge.putRecord(row)
+    for (const row of meta) await vaultStoreBridge.putMeta(row.key, row.value)
     await vaultStoreBridge.putMeta(MIGRATION_FLAG, new Date().toISOString())
-    // 同一份数据不保留两处副本：搬完就清空旧库（清除是幂等的）
+    // 只有确认搬运完成后才清空旧库（清除是幂等的），避免中途失败时旧数据被删
     await idbClearRecords()
     await idbClearMeta()
   } catch {

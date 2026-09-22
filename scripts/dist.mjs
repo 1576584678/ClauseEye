@@ -86,11 +86,26 @@ const artifactsIn = (dir) => {
   )
 }
 
+/** 打包失败后是否留下了 .tmp 目录：只有这种"改名被占用"才值得换目录重跑 */
+const hasTempLeftover = (dir) => {
+  try {
+    return readdirSync(dir).some((name) => name.endsWith('.tmp'))
+  } catch {
+    return false
+  }
+}
+
 console.log(`→ 打包输出目录：${OUT_DIR}`)
 
 if (runElectronBuilder(OUT_DIR)) {
   reportDone(OUT_DIR)
   process.exit(0)
+}
+
+// 发布模式下不允许降级：否则可能向 Release 写入缺少安装版的不完整产物
+if (shouldPublish) {
+  console.error('✗ 打包失败，发布模式下不做降级（避免向 Release 写入不完整产物）。请在 CI 上构建发布。')
+  process.exit(1)
 }
 
 console.warn('\n⚠ 安装版 + 便携版打包失败，可能是本机策略拦截了 NSIS 自解压器；改用「仅便携版」重试……\n')
@@ -100,7 +115,12 @@ if (runElectronBuilder(OUT_DIR, PORTABLE_ONLY)) {
   process.exit(0)
 }
 
-// 仍然失败：只有在确认是「临时目录改名被占用」时才换地方重试
+// 仍然失败：只有确认是「临时目录改名被占用」（产物目录里残留 .tmp）时才换地方重试
+if (!hasTempLeftover(OUT_DIR)) {
+  console.error('✗ 打包失败，且不是目录被占用导致的改名问题，请检查上面的 electron-builder 输出。')
+  process.exit(1)
+}
+
 const fallbackDir = join(tmpdir(), 'clauseeye-release')
 console.warn(`\n⚠ 在 ${OUT_DIR} 构建失败，尝试改用临时目录 ${fallbackDir} 重试……\n`)
 

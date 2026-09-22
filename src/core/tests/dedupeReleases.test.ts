@@ -37,6 +37,14 @@ describe('发布去重（同一个 tag 只保留一条 Release）', () => {
     expect(ids(list)).toEqual([10])
   })
 
+  it('优先保留含 latest.yml 的更新链路完整条目，即使它的资产更少', () => {
+    const list = [
+      release(20, 'v2.0.0', ['ClauseEye-2.0.0-win-x64-setup.exe', 'ClauseEye-2.0.0-win-x64-portable.exe']),
+      release(21, 'v2.0.0', ['latest.yml']),
+    ]
+    expect(ids(list)).toEqual([20])
+  })
+
   it('不同 tag 之间互不影响', () => {
     const list = [
       release(1, 'v1.0.0', ['latest.yml']),

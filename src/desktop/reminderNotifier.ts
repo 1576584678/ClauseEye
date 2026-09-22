@@ -91,27 +91,36 @@ export function remindersFromDocuments(documents: DocumentRecord[]): ReminderIte
  *（应用常驻时也能在跨天后自动提醒）。
  */
 export function useReminderNotifications(documents: DocumentRecord[], settings: AppSettings): void {
+  // 用稳定的键值做依赖：父组件每次渲染重建的数组/对象引用不应触发重跑，否则会重复通知
+  const documentsKey = documents.map((doc) => `${doc.id}:${doc.importedAt}`).join('|')
+  const { systemNotifications, reminderLeadDays } = settings
+
   useEffect(() => {
-    if (!settings.systemNotifications) return
+    if (!systemNotifications) return
 
     let cancelled = false
 
     const run = async () => {
-      const supported = await reminderBridge.supported()
-      if (cancelled || !supported) return
-      const items = collectReminders(documents)
-      const result = await runReminderPass(items, {
-        leadDays: settings.reminderLeadDays,
-        log: loadNotifiedLog(),
-        send: (notice) =>
-          reminderBridge.notify({
-            noticeKey: notice.noticeKey,
-            title: notice.title,
-            body: notice.body,
-            docId: notice.docId,
-          }),
-      })
-      if (!cancelled && result.sent.length > 0) saveNotifiedLog(result.log)
+      try {
+        const supported = await reminderBridge.supported()
+        if (cancelled || !supported) return
+        const items = collectReminders(documents)
+        const result = await runReminderPass(items, {
+          leadDays: reminderLeadDays,
+          log: loadNotifiedLog(),
+          send: (notice) =>
+            reminderBridge.notify({
+              noticeKey: notice.noticeKey,
+              title: notice.title,
+              body: notice.body,
+              docId: notice.docId,
+            }),
+        })
+        // 已投递的记录必须落盘，与组件是否卸载无关，否则同一项会被重复提醒
+        if (result.sent.length > 0) saveNotifiedLog(result.log)
+      } catch (error) {
+        console.warn('[reminders] 提醒调度失败', error)
+      }
     }
 
     void run()
@@ -120,7 +129,7 @@ export function useReminderNotifications(documents: DocumentRecord[], settings: 
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [documents, settings])
+  }, [documentsKey, systemNotifications, reminderLeadDays])
 }
 
 /** 点击系统通知 → 跳到对应文档详情页 */

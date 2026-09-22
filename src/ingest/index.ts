@@ -46,7 +46,16 @@ export async function ingestFile(file: File, options: IngestOptions = {}): Promi
     const result = await extractPdf(buffer)
     if (result.likelyScanned && useOcr) {
       const ocr = await tryOcrPdf(buffer, options)
-      if (ocr) return { ...base, text: ocr.text, pageCount: result.pageCount, warnings: ocr.warnings }
+      if (ocr?.ok) return { ...base, text: ocr.text, pageCount: result.pageCount, warnings: ocr.warnings }
+      // OCR 失败：回退到 PDF 已抽取的内嵌文本，避免把已有文本覆盖成空
+      if (ocr) {
+        return {
+          ...base,
+          text: result.text,
+          pageCount: result.pageCount,
+          warnings: [...result.warnings, ocr.warning],
+        }
+      }
     }
     return { ...base, text: result.text, pageCount: result.pageCount, warnings: result.warnings }
   }
@@ -80,23 +89,21 @@ export async function ingestFile(file: File, options: IngestOptions = {}): Promi
   return { ...base, text: normalizeText(decoded.text), warnings: decoded.warnings }
 }
 
-/** 扫描版 PDF 的 OCR 降级路径：失败时不阻断导入，只在 warnings 里说明 */
+/** 扫描版 PDF 的 OCR 降级路径：失败时不阻断导入，由调用方回退到已抽取文本 */
 async function tryOcrPdf(
   buffer: ArrayBuffer,
   options: IngestOptions,
-): Promise<{ text: string; warnings: string[] } | null> {
+): Promise<{ ok: true; text: string; warnings: string[] } | { ok: false; warning: string } | null> {
   try {
     const { ocrPdf, ocrAvailable } = await import('./ocr')
     if (!(await ocrAvailable())) return null
     const result = await ocrPdf(buffer, { onProgress: options.onProgress })
-    return { text: result.text, warnings: result.warnings }
+    return { ok: true, text: result.text, warnings: result.warnings }
   } catch (error) {
     options.onProgress?.('')
     return {
-      text: '',
-      warnings: [
-        `扫描件 OCR 失败（${error instanceof Error ? error.message : String(error)}），已按空文本导入，请使用「粘贴文本」补录。`,
-      ],
+      ok: false,
+      warning: `扫描件 OCR 失败（${error instanceof Error ? error.message : String(error)}），已回退到 PDF 内嵌文本，请核对内容或使用「粘贴文本」补录。`,
     }
   }
 }

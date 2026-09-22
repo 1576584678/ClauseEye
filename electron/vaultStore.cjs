@@ -41,33 +41,51 @@ function createVaultStore({ file }) {
   let stmt = null
 
   function open() {
-    if (db) return db
+    if (db && stmt) return db
     const { DatabaseSync } = require('node:sqlite')
     fs.mkdirSync(require('node:path').dirname(file), { recursive: true })
-    db = new DatabaseSync(file)
-    db.exec(SCHEMA)
-    stmt = {
-      putRecord: db.prepare(
-        'INSERT INTO records (id, sealed, updated_at) VALUES (?, ?, ?) ' +
-          'ON CONFLICT(id) DO UPDATE SET sealed = excluded.sealed, updated_at = excluded.updated_at',
-      ),
-      getRecord: db.prepare('SELECT id, sealed, updated_at FROM records WHERE id = ?'),
-      allRecords: db.prepare('SELECT id, sealed, updated_at FROM records ORDER BY updated_at ASC'),
-      deleteRecord: db.prepare('DELETE FROM records WHERE id = ?'),
-      clearRecords: db.prepare('DELETE FROM records'),
-      putMeta: db.prepare(
-        'INSERT INTO meta (key, value) VALUES (?, ?) ' + 'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-      ),
-      getMeta: db.prepare('SELECT value FROM meta WHERE key = ?'),
-      clearMeta: db.prepare('DELETE FROM meta'),
-      countRecords: db.prepare('SELECT COUNT(*) AS n FROM records'),
+    const opened = new DatabaseSync(file)
+    try {
+      opened.exec(SCHEMA)
+      stmt = {
+        putRecord: opened.prepare(
+          'INSERT INTO records (id, sealed, updated_at) VALUES (?, ?, ?) ' +
+            'ON CONFLICT(id) DO UPDATE SET sealed = excluded.sealed, updated_at = excluded.updated_at',
+        ),
+        getRecord: opened.prepare('SELECT id, sealed, updated_at FROM records WHERE id = ?'),
+        allRecords: opened.prepare('SELECT id, sealed, updated_at FROM records ORDER BY updated_at ASC'),
+        deleteRecord: opened.prepare('DELETE FROM records WHERE id = ?'),
+        clearRecords: opened.prepare('DELETE FROM records'),
+        putMeta: opened.prepare(
+          'INSERT INTO meta (key, value) VALUES (?, ?) ' + 'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        ),
+        getMeta: opened.prepare('SELECT value FROM meta WHERE key = ?'),
+        clearMeta: opened.prepare('DELETE FROM meta'),
+        countRecords: opened.prepare('SELECT COUNT(*) AS n FROM records'),
+      }
+      db = opened
+    } catch (error) {
+      // 初始化失败必须回滚到未打开状态，否则后续调用会撞上 stmt === null 的 TypeError
+      try {
+        opened.close()
+      } catch {
+        /* ignore */
+      }
+      db = null
+      stmt = null
+      throw error
     }
     return db
   }
 
   function toRow(raw) {
     if (!raw) return undefined
-    return { id: raw.id, sealed: JSON.parse(raw.sealed), updatedAt: raw.updated_at }
+    try {
+      return { id: raw.id, sealed: JSON.parse(raw.sealed), updatedAt: raw.updated_at }
+    } catch {
+      // 单条记录损坏不应让整库读取失败
+      return undefined
+    }
   }
 
   return {
@@ -83,7 +101,7 @@ function createVaultStore({ file }) {
     },
     getAllRecords() {
       open()
-      return stmt.allRecords.all().map(toRow)
+      return stmt.allRecords.all().map(toRow).filter(Boolean)
     },
     deleteRecord(id) {
       open()
@@ -103,7 +121,12 @@ function createVaultStore({ file }) {
     getMeta(key) {
       open()
       const row = stmt.getMeta.get(String(key))
-      return row ? JSON.parse(row.value) : undefined
+      if (!row) return undefined
+      try {
+        return JSON.parse(row.value)
+      } catch {
+        return undefined
+      }
     },
     clearMeta() {
       open()

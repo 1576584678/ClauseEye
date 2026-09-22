@@ -26,7 +26,9 @@ export const LABOR_RULES: Rule[] = [
       const termMonths = extractTermMonths(ctx.text)
       const cap = legalProbationCapMonths(termMonths)
       return findMatches(ctx, /试用期[^。；]{0,40}/g, (m) => {
-        const months = parseDurationMonths(m[0])
+        // 窗口常把紧随其后的"劳动合同期限 2 年"一并纳入，先截断到第一段再解析
+        const segment = m[0].split(/[，,；;。、()（）]|合同期限|劳动合同|合同有效期/)[0]
+        const months = parseDurationMonths(segment)
         if (months === null) return null
         if (months <= cap) return null
         const termText = termMonths === null ? '未能识别合同期限' : `本合同期限约 ${termMonths} 个月`

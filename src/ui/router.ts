@@ -7,12 +7,21 @@ export type Route =
   | { name: 'reminders' }
   | { name: 'settings' }
 
+/** 安全解码 hash 片段：非法百分号编码（如 #/doc/%zz）不应让路由解析崩溃 */
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 export function parseHash(hash: string): Route {
   const clean = hash.replace(/^#\/?/, '')
   const [head, tail] = clean.split('/')
   switch (head) {
     case 'doc':
-      return tail ? { name: 'doc', id: decodeURIComponent(tail) } : { name: 'vault' }
+      return tail ? { name: 'doc', id: safeDecode(tail) } : { name: 'vault' }
     case 'offers':
       return { name: 'offers' }
     case 'reminders':

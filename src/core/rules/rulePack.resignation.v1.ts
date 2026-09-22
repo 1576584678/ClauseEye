@@ -32,8 +32,9 @@ export const RESIGNATION_V1_RULES: Rule[] = [
     maxMatches: 2,
     detect(ctx) {
       return findMatches(ctx, /(?:岗位|职务|部门|职位)/g, (m) => {
-        const window = ctx.text.slice(Math.max(0, m.index - 30), m.index + 40)
-        if (/(?:岗位|职务|职位)[：:是]?\s*[\u4e00-\u9fa5A-Za-z]{2,}/.test(window)) return null
+        // 只看关键词之后的正文，避免把关键词本身当成"已写明岗位"
+        const tail = ctx.text.slice(m.index + m[0].length, m.index + m[0].length + 40)
+        if (/(?:岗位|职务|职位|部门)\s*[：:是为]?\s*[\u4e00-\u9fa5A-Za-z]{2,}/.test(m[0] + tail)) return null
         return {}
       })
     },

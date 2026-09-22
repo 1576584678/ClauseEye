@@ -15,9 +15,15 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const ELECTRON_DIR = join(ROOT, 'node_modules', 'electron')
 const DIST_DIR = join(ELECTRON_DIR, 'dist')
-const binary = process.platform === 'win32' ? 'electron.exe' : 'electron'
+/** Electron 各平台真实可执行文件路径（macOS 在 .app 包内） */
+const electronBinary =
+  process.platform === 'win32'
+    ? join(DIST_DIR, 'electron.exe')
+    : process.platform === 'darwin'
+      ? join(DIST_DIR, 'Electron.app', 'Contents', 'MacOS', 'Electron')
+      : join(DIST_DIR, 'electron')
 
-if (existsSync(join(DIST_DIR, binary))) {
+if (existsSync(electronBinary)) {
   console.log('✓ Electron 运行时已就绪')
   process.exit(0)
 }
@@ -29,10 +35,15 @@ if (!existsSync(installer)) {
 }
 
 console.log('→ node_modules/electron/dist 缺失，重新执行 Electron 安装脚本')
-execFileSync(process.execPath, [installer], { cwd: ELECTRON_DIR, stdio: 'inherit' })
+try {
+  execFileSync(process.execPath, [installer], { cwd: ELECTRON_DIR, stdio: 'inherit' })
+} catch (error) {
+  console.error(`✗ 执行 Electron 安装脚本失败：${error instanceof Error ? error.message : String(error)}`)
+  process.exit(1)
+}
 
-if (!existsSync(join(DIST_DIR, binary))) {
-  console.error(`✗ 仍然缺少 ${join(DIST_DIR, binary)}`)
+if (!existsSync(electronBinary)) {
+  console.error(`✗ 仍然缺少 ${electronBinary}`)
   process.exit(1)
 }
 console.log('✓ Electron 运行时已补齐')

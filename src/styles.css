@@ -1695,6 +1695,28 @@ label {
   font-size: 12.5px;
 }
 
+/* 新版本横幅：出现在页面顶部，与忙碌条同层级
+   必须定义在下方响应式媒体查询之前——两者选择器优先级相同，后出现的生效 */
+.update-banner {
+  position: sticky;
+  top: -26px;
+  z-index: 21;
+  margin: -26px -32px 18px;
+  padding: 10px 32px;
+  background: linear-gradient(90deg, rgba(124, 92, 255, 0.22), rgba(91, 140, 255, 0.18));
+  border-bottom: 1px solid rgba(124, 92, 255, 0.35);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+  color: #e3ddff;
+  backdrop-filter: blur(6px);
+}
+
+.update-banner .update-text {
+  flex: 1;
+}
+
 /* ---------- 响应式 ---------- */
 @media (max-width: 1080px) {
   .doc-body {
@@ -1782,25 +1804,4 @@ label {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-/* 新版本横幅：出现在页面顶部，与忙碌条同层级 */
-.update-banner {
-  position: sticky;
-  top: -26px;
-  z-index: 21;
-  margin: -26px -32px 18px;
-  padding: 10px 32px;
-  background: linear-gradient(90deg, rgba(124, 92, 255, 0.22), rgba(91, 140, 255, 0.18));
-  border-bottom: 1px solid rgba(124, 92, 255, 0.35);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 12.5px;
-  color: #e3ddff;
-  backdrop-filter: blur(6px);
-}
-
-.update-banner .update-text {
-  flex: 1;
 }

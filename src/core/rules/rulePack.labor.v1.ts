@@ -7,6 +7,7 @@
  */
 
 import { findMatches, type Rule } from './engine'
+import { cnToNumber } from '../text'
 
 export const LABOR_V1_RULES: Rule[] = [
   {
@@ -141,9 +142,9 @@ export const LABOR_V1_RULES: Rule[] = [
       return findMatches(ctx, /竞业[^。；\n]{0,40}/g, (m) => {
         const months = /(?:(\d{1,2}|[一二三四五六七八九十两]+)\s*(?:个)?\s*月)|(?:(\d{1,2}|[一二三四五六七八九十两]+)\s*年)/.exec(m[0])
         if (!months) return null
-        const value = months[1] ? Number(months[1]) : null
-        const yearsCn: Record<string, number> = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 }
-        const monthValue = value ?? (months[2] ? (yearsCn[months[2]] ?? 0) * 12 : null)
+        const fromMonth = months[1] ? cnToNumber(months[1]) : null
+        const fromYear = months[2] ? cnToNumber(months[2]) : null
+        const monthValue = fromMonth ?? (fromYear === null ? null : fromYear * 12)
         if (monthValue === null || monthValue <= 24) return null
         return {
           severity: 'high',

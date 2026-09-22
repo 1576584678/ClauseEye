@@ -9,7 +9,8 @@ export default defineConfig({
   // 相对路径：产物既能被 Vite dev server 提供，也能被 Electron 的 app:// 自定义协议加载
   base: './',
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
-  server: { port: 5173 },
+  // strictPort：端口被占用时直接失败，避免 Vite 静默换端口导致 Electron 加载空白页
+  server: { port: 5173, strictPort: true },
   build: { target: 'es2022', outDir: 'dist', emptyOutDir: true },
   test: {
     environment: 'node',

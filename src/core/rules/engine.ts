@@ -106,7 +106,9 @@ export function runRules(ctx: RuleContext, category: CategoryCode, rules: Rule[]
     let matches: RuleMatch[] = []
     try {
       matches = rule.detect(ctx)
-    } catch {
+    } catch (error) {
+      // 规则执行失败不能静默丢失命中，留下可诊断信息
+      console.warn(`[rules] 规则 ${rule.id} 执行失败`, error)
       matches = []
     }
     const limit = rule.maxMatches ?? 3
@@ -161,6 +163,5 @@ export function summarizeRisks(flags: RiskFlag[]): { high: number; medium: numbe
     total: flags.filter((f) => f.status !== 'false_positive').length,
   }
 }
-
 
 

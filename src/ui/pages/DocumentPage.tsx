@@ -237,6 +237,7 @@ export function DocumentPage({ id }: { id: string }) {
           type="button"
           className="btn btn-danger"
           onClick={async () => {
+            if (!window.confirm(`确定删除《${doc.title}》？该操作不可撤销。`)) return
             await removeDocument(doc.id)
             navigate({ name: 'vault' })
           }}
@@ -250,11 +251,11 @@ export function DocumentPage({ id }: { id: string }) {
 }
 
 function groupBySeverity(risks: RiskFlag[]): Record<Severity, RiskFlag[]> {
-  const active = risks.filter((r) => r.status !== 'false_positive')
   return {
-    high: active.filter((r) => r.severity === 'high'),
-    medium: active.filter((r) => r.severity === 'medium'),
-    low: active.filter((r) => r.severity === 'low'),
+    // 已标误报的条目保留在列表里（置灰显示），否则用户没有入口撤销误操作
+    high: risks.filter((r) => r.severity === 'high'),
+    medium: risks.filter((r) => r.severity === 'medium'),
+    low: risks.filter((r) => r.severity === 'low'),
   }
 }
 

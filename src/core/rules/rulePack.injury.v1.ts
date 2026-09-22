@@ -16,8 +16,8 @@ export const INJURY_V1_RULES: Rule[] = [
       return findMatches(ctx, /(?:劳动功能障碍|劳动能力|伤残)[^。；\n]{0,30}/g, (m) => {
         const window = ctx.text.slice(Math.max(0, m.index - 30), m.index + 80)
         if (/(?:[一二三四五六七八九十]|\d)\s*级/.test(window)) return null
-        if (/(?:等级|程度|结论)/.test(window)) return {}
-        return null
+        // 只要窗口内没有出现「X 级」，就属于"未载明等级"，应命中
+        return {}
       })
     },
   },
@@ -80,7 +80,7 @@ export const INJURY_V1_RULES: Rule[] = [
     detect(ctx) {
       return findMatches(ctx, /(?:劳动能力鉴定委员会|鉴定机构|鉴定书编号|鉴定日期)/g, (m) => {
         const window = ctx.text.slice(Math.max(0, m.index - 20), m.index + 60)
-        if (/(?:委员会|鉴定书编号|编号|第\s*\d+\s*号)/.test(window) && /\d{4}\s*年/.test(ctx.text)) return null
+        if (/(?:委员会|鉴定书编号|编号|第\s*\d+\s*号)/.test(window) && /\d{4}\s*年/.test(window)) return null
         return {}
       })
     },
@@ -128,11 +128,16 @@ export const INJURY_V1_RULES: Rule[] = [
     suggestion: '要求写明各待遇项目的支付主体；单位未参保的，所有费用均应由单位承担并写入书面确认。',
     maxMatches: 2,
     detect(ctx) {
-      return findMatches(ctx, /(?:工伤保险基金|用人单位|单位)[^。；\n]{0,20}(?:支付|承担|垫付)/g, (m) => {
-        const window = ctx.text.slice(Math.max(0, m.index - 40), m.index + 60)
-        if (/(?:基金|单位|用人单位)/.test(window) && /(?:分别|由|承担|支付)/.test(window)) return null
-        return {}
-      })
+      return findMatches(
+        ctx,
+        /(?:费用|待遇|款项|赔偿|补助金)[^。；\n]{0,12}(?:由|按)[^。；\n]{0,8}(?:有关|相关|相应|责任方|各自|另行|协商|国家规定|政策|法律)[^。；\n]{0,8}(?:承担|支付|处理|确定|分担)/g,
+        (m) => {
+          const window = ctx.text.slice(Math.max(0, m.index - 40), m.index + m[0].length + 40)
+          // 同一句里已写明具体支付主体（工伤保险基金 / 用人单位）时视为明确
+          if (/(?:工伤保险基金|用人单位|单位)[^。；\n]{0,10}(?:支付|承担|垫付)/.test(window)) return null
+          return {}
+        },
+      )
     },
   },
   {

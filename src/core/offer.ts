@@ -252,17 +252,18 @@ function referenceFor(key: string): number {
 
 function normalizeScores(raw: number[]): number[] {
   if (raw.length === 0) return []
-  const max = Math.max(...raw, 1)
-  return raw.map((v) => Math.round((Math.max(0, v) / max) * 100))
+  const max = Math.max(...raw)
+  const min = Math.min(...raw)
+  // 全部分数相同（含得分全为 0 或全为负）时不再除以 max，否则会被截断成一堆 0 分
+  if (max === min) return raw.map(() => 100)
+  // 用 min-max 归一化：即使总分整体为负，也能保留「谁相对更好」的区分度
+  return raw.map((v) => Math.round(((v - min) / (max - min)) * 100))
 }
 
 function rankScores(scores: number[]): number[] {
-  const order = scores.map((s, i) => ({ s, i })).sort((a, b) => b.s - a.s)
-  const ranks = new Array(scores.length).fill(0)
-  order.forEach((item, idx) => {
-    ranks[item.i] = idx + 1
-  })
-  return ranks
+  const sorted = [...scores].sort((a, b) => b - a)
+  // 并列同分给同名次（1、1、3…），否则得分相同的 Offer 会被拆成不同名次
+  return scores.map((s) => sorted.indexOf(s) + 1)
 }
 
 /** 本地简评：不依赖任何模型，纯结构化对比得出的结论 */

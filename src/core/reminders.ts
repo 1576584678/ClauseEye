@@ -129,6 +129,7 @@ export function pruneNotified(
   const kept: Record<string, string> = {}
   for (const [key, at] of Object.entries(notified)) {
     const time = Date.parse(at)
+    // 解析失败的时间戳保留（无法判断新旧，丢弃会导致重复提醒）
     if (Number.isNaN(time) || time >= cutoff) kept[key] = at
   }
   return kept

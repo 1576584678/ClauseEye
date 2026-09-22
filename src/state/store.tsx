@@ -73,31 +73,42 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void (async () => {
-      const loaded = await vault.load()
-      setHasPassphrase(Boolean(loaded.meta?.hasPassphrase))
-      // 无口令模式的保险箱没有可输入的口令，直接打开
-      if (loaded.status === 'locked' && loaded.meta && !loaded.meta.hasPassphrase) {
-        try {
-          await vault.unlock()
-          setStatus('unlocked')
-          refresh()
-        } catch (error) {
-          setStatus('locked')
-          notify(errorText(error), 'error')
+      try {
+        const loaded = await vault.load()
+        setHasPassphrase(Boolean(loaded.meta?.hasPassphrase))
+        // 无口令模式的保险箱没有可输入的口令，直接打开
+        if (loaded.status === 'locked' && loaded.meta && !loaded.meta.hasPassphrase) {
+          try {
+            await vault.unlock()
+            setStatus('unlocked')
+            refresh()
+          } catch (error) {
+            setStatus('locked')
+            notify(errorText(error), 'error')
+          }
+        } else {
+          setStatus(loaded.status)
         }
-      } else {
-        setStatus(loaded.status)
+      } catch (error) {
+        // 初始化失败也必须让界面进入可用状态，否则会永远卡在加载中
+        setStatus('locked')
+        notify(errorText(error), 'error')
+      } finally {
+        setReady(true)
       }
-      setReady(true)
     })()
   }, [notify, refresh])
 
   const createVault = useCallback(
     async (passphrase?: string, hint?: string) => {
-      await vault.create({ passphrase, hint })
-      setStatus('unlocked')
-      refresh()
-      notify(passphrase ? '保险箱已创建（口令保护已开启）' : '保险箱已创建（无口令模式）', 'success')
+      try {
+        await vault.create({ passphrase, hint })
+        setStatus('unlocked')
+        refresh()
+        notify(passphrase ? '保险箱已创建（口令保护已开启）' : '保险箱已创建（无口令模式）', 'success')
+      } catch (error) {
+        notify(errorText(error), 'error')
+      }
     },
     [notify, refresh],
   )
@@ -195,30 +206,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
           },
           ingested.warnings,
         )
+      } catch (error) {
+        notify(`解析失败：${errorText(error)}`, 'error')
       } finally {
         setBusy(false)
       }
     },
-    [importDocument],
+    [importDocument, notify],
   )
 
   const loadSample = useCallback(
     async (key: string) => {
       const sample = SAMPLE_DOCS.find((s) => s.key === key)
       if (!sample) return
-      await importDocument(
-        {
-          title: sample.title,
-          fileName: sample.fileName,
-          mimeType: 'text/plain',
-          sizeBytes: new TextEncoder().encode(sample.text).length,
-          text: sample.text.replace(/\r\n/g, '\n'),
-          pageCount: null,
-        },
-        [],
-      )
+      try {
+        await importDocument(
+          {
+            title: sample.title,
+            fileName: sample.fileName,
+            mimeType: 'text/plain',
+            sizeBytes: new TextEncoder().encode(sample.text).length,
+            text: sample.text.replace(/\r\n/g, '\n'),
+            pageCount: null,
+          },
+          [],
+        )
+      } catch (error) {
+        notify(`示例导入失败：${errorText(error)}`, 'error')
+      }
     },
-    [importDocument],
+    [importDocument, notify],
   )
 
   const loadAllSamples = useCallback(async () => {
@@ -239,6 +256,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       refresh()
       notify('示例文档已导入，可直接查看坑点清单与多 Offer 对比。', 'success')
+    } catch (error) {
+      notify(`示例导入失败：${errorText(error)}`, 'error')
     } finally {
       setBusy(false)
       setBusyText('')
@@ -247,9 +266,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const removeDocument = useCallback(
     async (id: string) => {
-      await vault.deleteDocument(id)
-      refresh()
-      notify('文档已从本地保险箱删除。', 'success')
+      try {
+        await vault.deleteDocument(id)
+        refresh()
+        notify('文档已从本地保险箱删除。', 'success')
+      } catch (error) {
+        notify(`删除失败：${errorText(error)}`, 'error')
+      }
     },
     [notify, refresh],
   )
@@ -264,6 +287,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await vault.putDocument({ ...doc, analysis, category: analysis.category })
         refresh()
         notify('已用最新规则库重新分析（规则版本 ' + analysis.rulesVersion + '）。', 'success')
+      } catch (error) {
+        notify(`重新分析失败：${errorText(error)}`, 'error')
       } finally {
         setBusy(false)
       }
@@ -275,14 +300,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (id: string, category: DocumentRecord['category']) => {
       const doc = vault.getDocument(id)
       if (!doc) return
-      const analysis = analyzeDocument(doc.text)
-      await vault.putDocument({
-        ...doc,
-        category,
-        analysis: { ...analysis, category, notes: [...analysis.notes, '分类由用户手动确认。'] },
-      })
-      refresh()
-      notify('已更新分类，并按新场景重跑规则与对比口径。', 'success')
+      try {
+        const analysis = analyzeDocument(doc.text)
+        await vault.putDocument({
+          ...doc,
+          category,
+          analysis: { ...analysis, category, notes: [...analysis.notes, '分类由用户手动确认。'] },
+        })
+        refresh()
+        notify('已更新分类，并按新场景重跑规则与对比口径。', 'success')
+      } catch (error) {
+        notify(`更新分类失败：${errorText(error)}`, 'error')
+      }
     },
     [notify, refresh],
   )
@@ -291,20 +320,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (docId: string, flagId: string, flagStatus: FlagStatus) => {
       const doc = vault.getDocument(docId)
       if (!doc?.analysis) return
-      const risks = doc.analysis.risks.map((risk) => (risk.id === flagId ? { ...risk, status: flagStatus } : risk))
-      await vault.putDocument({ ...doc, analysis: { ...doc.analysis, risks } })
-      refresh()
+      try {
+        const risks = doc.analysis.risks.map((risk) => (risk.id === flagId ? { ...risk, status: flagStatus } : risk))
+        await vault.putDocument({ ...doc, analysis: { ...doc.analysis, risks } })
+        refresh()
+      } catch (error) {
+        notify(`标记失败：${errorText(error)}`, 'error')
+      }
     },
-    [refresh],
+    [notify, refresh],
   )
 
   const updateSettings = useCallback(
     async (patch: Partial<AppSettings>) => {
-      const next: AppSettings = { ...vault.settings, ...patch, byok: { ...vault.settings.byok, ...(patch.byok ?? {}) } }
-      await vault.saveSettings(next)
-      refresh()
+      try {
+        const next: AppSettings = { ...vault.settings, ...patch, byok: { ...vault.settings.byok, ...(patch.byok ?? {}) } }
+        await vault.saveSettings(next)
+        refresh()
+      } catch (error) {
+        notify(`设置保存失败：${errorText(error)}`, 'error')
+      }
     },
-    [refresh],
+    [notify, refresh],
   )
 
   const runByok = useCallback(
@@ -332,23 +369,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const exportBackup = useCallback(async () => {
-    const json = await vault.exportBackup()
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `clauseeye-backup-${new Date().toISOString().slice(0, 10)}.json`
-    link.click()
-    URL.revokeObjectURL(url)
-    notify('已导出台账备份（明文 JSON，不含 BYOK 密钥）。', 'success')
+    try {
+      const json = await vault.exportBackup()
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `clauseeye-backup-${new Date().toISOString().slice(0, 10)}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      notify('已导出台账备份（明文 JSON，不含 BYOK 密钥）。', 'success')
+    } catch (error) {
+      notify(`导出失败：${errorText(error)}`, 'error')
+    }
   }, [notify])
 
   const wipeAll = useCallback(async () => {
-    await vault.wipe()
-    setStatus('uninitialized')
-    setDocuments([])
-    setSettings(DEFAULT_SETTINGS)
-    notify('本地数据已全部清空。', 'success')
+    try {
+      await vault.wipe()
+      setStatus('uninitialized')
+      setDocuments([])
+      setSettings(DEFAULT_SETTINGS)
+      notify('本地数据已全部清空。', 'success')
+    } catch (error) {
+      notify(`清空失败：${errorText(error)}`, 'error')
+    }
   }, [notify])
 
   const value = useMemo<AppContextValue>(

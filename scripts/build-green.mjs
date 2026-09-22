@@ -22,6 +22,7 @@
 import { createRequire } from 'node:module'
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
@@ -36,6 +37,11 @@ const OUT_DIR = resolve(
     : process.env.CLAUSEEYE_OUT_DIR || join(ROOT, 'release'),
 )
 const APP_DIR = join(OUT_DIR, 'ClauseEye-green')
+
+// 下面会 rmSync 递归删除 OUT_DIR 下的子目录，先挡住明显误传的路径（仓库根/用户目录/文件系统根）
+if (OUT_DIR === resolve(ROOT) || OUT_DIR === resolve(homedir()) || OUT_DIR === resolve(OUT_DIR, '..')) {
+  fail(`--out / CLAUSEEYE_OUT_DIR 指向了不安全的位置：${OUT_DIR}，已中止（会被清空的子目录：ClauseEye-green、app-src-tmp）`)
+}
 
 const ELECTRON_DIST = join(ROOT, 'node_modules', 'electron', 'dist')
 const DIST_DIR = join(ROOT, 'dist')

@@ -22,6 +22,17 @@ function assetWeight(release) {
   return (release?.assets || []).filter((asset) => !String(asset?.name || '').endsWith('.blockmap')).length
 }
 
+/**
+ * 自动更新链路必需资产的完整度：latest.yml 与安装包缺一不可。
+ * 只看"非 blockmap 资产数"会误删更新链路更完整的那条（例如只留 blockmap 的那条反而资产更多）。
+ */
+function completeness(release) {
+  const names = (release?.assets || []).map((asset) => String(asset?.name || ''))
+  const hasManifest = names.some((name) => /^latest.*\.ya?ml$/i.test(name))
+  const hasInstaller = names.some((name) => /\.(exe|dmg|AppImage)$/i.test(name))
+  return (hasManifest ? 2 : 0) + (hasInstaller ? 1 : 0)
+}
+
 /** 纯函数：从 Release 列表里挑出应当删除的重复条目，便于单测 */
 export function selectRedundantReleases(releases) {
   const groups = new Map()
@@ -38,7 +49,12 @@ export function selectRedundantReleases(releases) {
     if (list.length < 2) continue
     const ranked = list
       .slice()
-      .sort((a, b) => assetWeight(a) - assetWeight(b) || (a.id || 0) - (b.id || 0))
+      .sort(
+        (a, b) =>
+          completeness(a) - completeness(b) ||
+          assetWeight(a) - assetWeight(b) ||
+          (a.id || 0) - (b.id || 0),
+      )
       .reverse()
     for (const release of ranked.slice(1)) {
       redundant.push({ id: release.id, tag, assets: assetWeight(release) })

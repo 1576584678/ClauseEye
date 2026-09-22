@@ -1,7 +1,7 @@
 {
   "name": "clauseeye",
   "private": true,
-  "version": "0.7.1",
+  "version": "0.7.2",
   "type": "module",
   "description": "ClauseEye / 契眼 — 本地优先的个人合同文档管家：坑点扫描、Offer 对比、到期提醒、离线 OCR（桌面版 + Web 版）",
   "scripts": {
@@ -15,9 +15,9 @@
     "electron": "npm run build && electron .",
     "electron:dev": "cross-env CLAUSEEYE_DEV_URL=http://localhost:5173 electron .",
     "electron:smoke": "npm run build && cross-env CLAUSEEYE_SMOKE=1 electron .",
-    "dist": "npm run build && node scripts/dist.mjs",
-    "dist:release": "npm run build && node scripts/dist.mjs --publish",
-    "dist:green": "npm run build && node scripts/build-green.mjs",
+    "dist": "npm run build:release && node scripts/dist.mjs",
+    "dist:release": "npm run build:release && node scripts/dist.mjs --publish",
+    "dist:green": "npm run build:release && node scripts/build-green.mjs",
     "tessdata": "node scripts/fetch-tessdata.mjs",
     "dedupe:releases": "node scripts/dedupe-releases.mjs",
     "publish:release": "node scripts/publish-release.mjs",

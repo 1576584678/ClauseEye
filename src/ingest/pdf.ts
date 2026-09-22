@@ -20,11 +20,13 @@ const CJK = /[\u3400-\u9fff]/
 export async function extractPdf(data: ArrayBuffer): Promise<PdfExtractResult> {
   const warnings: string[] = []
   const task = pdfjs.getDocument({ data: new Uint8Array(data), useSystemFonts: true })
-  const doc = await task.promise
   const pages: string[] = []
   let emptyPages = 0
+  let pageCount = 0
 
   try {
+    const doc = await task.promise
+    pageCount = doc.numPages
     for (let pageNo = 1; pageNo <= doc.numPages; pageNo++) {
       const page = await doc.getPage(pageNo)
       const content = await page.getTextContent()
@@ -43,11 +45,15 @@ export async function extractPdf(data: ArrayBuffer): Promise<PdfExtractResult> {
       if (pageText.trim().length === 0) emptyPages += 1
       pages.push(pageText)
     }
+  } catch (error) {
+    // 解析失败不能把异常直接抛给调用方：给出可读提示，同时仍释放 worker
+    warnings.push(
+      `PDF 解析失败（${error instanceof Error ? error.message : String(error)}），文件可能已损坏或加密。可改用「粘贴文本」补录。`,
+    )
   } finally {
     await task.destroy()
   }
 
-  const pageCount = doc.numPages
   const likelyScanned = pageCount > 0 && (emptyPages === pageCount || emptyPages / pageCount > 0.5)
   if (likelyScanned) {
     warnings.push(

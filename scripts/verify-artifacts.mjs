@@ -22,6 +22,12 @@ const dir = resolve(dirIndex !== -1 && args[dirIndex + 1] ? args[dirIndex + 1] :
 
 const MIN_INSTALLER_BYTES = 30 * 1024 * 1024
 
+const VALID_PLATFORMS = ['windows', 'macos', 'linux', 'all']
+if (!VALID_PLATFORMS.includes(platform)) {
+  console.log(`::error::非法的 --platform 值：${platform}（可选 ${VALID_PLATFORMS.join('|')}）`)
+  process.exit(1)
+}
+
 const files = existsSync(dir) ? readdirSync(dir).filter((name) => statSync(join(dir, name)).isFile()) : []
 const match = (re) => files.filter((name) => re.test(name))
 

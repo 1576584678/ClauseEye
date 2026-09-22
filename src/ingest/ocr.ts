@@ -103,8 +103,9 @@ export async function ocrPdf(
       )
       const page = await doc.getPage(pageNo)
       const viewport = page.getViewport({ scale: 1 })
-      const scale = Math.min(3, MAX_RENDER_SIDE / Math.max(viewport.width, viewport.height))
-      const scaledViewport = page.getViewport({ scale: Math.max(1.2, scale) })
+      // 光栅化比例服从最长边像素上限（大页面会被缩小），同时不超过 3 倍，避免超大 canvas
+      const fit = MAX_RENDER_SIDE / Math.max(viewport.width, viewport.height)
+      const scaledViewport = page.getViewport({ scale: Math.min(fit, 3) })
       const canvas = createCanvas(Math.round(scaledViewport.width), Math.round(scaledViewport.height))
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('无法创建绘图上下文')

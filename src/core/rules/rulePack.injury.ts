@@ -14,7 +14,12 @@ export const INJURY_RULES: Rule[] = [
     maxMatches: 1,
     detect(ctx) {
       const hasGrade = /(?:伤残等级|伤残情况|劳动功能障碍|生活自理障碍|致残程度|评定为|等级为)[^。；\n]{0,20}/.test(ctx.text)
-      if (hasGrade) return []
+      // 「未载明劳动功能障碍程度」这类否定表述里也含关键词，不能当作"已载明等级"
+      const negated =
+        /(?:未|尚未|没有|不予|不构成|不再)[^。；\n]{0,6}(?:载明|评定|认定|鉴定|明确)[^。；\n]{0,10}(?:等级|程度|伤残|功能障碍|自理障碍)/.test(
+          ctx.text,
+        )
+      if (hasGrade && !negated) return []
       return [wholeDocMatch(ctx, { reason: '文档中未找到"伤残等级/劳动功能障碍程度"等结论性表述，可能只是鉴定受理或认定材料。' })]
     },
   },

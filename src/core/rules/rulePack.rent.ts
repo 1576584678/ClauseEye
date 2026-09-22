@@ -161,9 +161,11 @@ export const RENT_RULES: Rule[] = [
     maxMatches: 2,
     detect(ctx) {
       return findMatches(ctx, /(?:逾期|迟延|拖欠)[^。；\n]{0,30}(?:违约金|滞纳金|罚息)[^。；\n]{0,40}/g, (m) => {
-        const rate = /(?:日|每天|每日)[^。；\n]{0,10}(\d+(?:\.\d+)?)\s*(%|‰|万分之|千分之)/.exec(m[0])
+        const rate =
+          /(?:日|每天|每日)[^。；\n]{0,10}(\d+(?:\.\d+)?|[一二三四五六七八九十两])\s*(%|‰)/.exec(m[0]) ??
+          /(?:日|每天|每日)[^。；\n]{0,10}(万分之|千分之)\s*(\d+(?:\.\d+)?|[一二三四五六七八九十两])/.exec(m[0])
         if (!rate) return {}
-        return { severity: 'high', reason: `逾期违约按日计收（约 ${rate[1]}${rate[2] === '%' ? '%' : rate[2]} / 日），累计金额会快速放大。` }
+        return { severity: 'high', reason: `逾期违约按日计收（约 ${rate[1]}${rate[2]} / 日），累计金额会快速放大。` }
       })
     },
   },

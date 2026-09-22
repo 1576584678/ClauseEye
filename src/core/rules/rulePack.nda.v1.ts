@@ -65,7 +65,7 @@ export const NDA_V1_RULES: Rule[] = [
       return findMatches(ctx, /(?:例外|除外|不视为违约|依法披露|法律要求)/g, (m) => {
         const window = ctx.text.slice(Math.max(0, m.index - 60), m.index + 80)
         if (/(?:法律|司法|监管|法院|仲裁)/.test(window)) return null
-        return null
+        return {}
       })
     },
   },

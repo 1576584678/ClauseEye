@@ -167,25 +167,28 @@ const CN_DIGITS: Record<string, number> = {
   九: 9,
 }
 
-/** 中文数字 → 阿拉伯数字（支持 三十六 / 十五 / 一百二十 这类写法） */
+/** 中文数字 → 阿拉伯数字（支持 三十六 / 十五 / 一百二十 / 三千五百 这类写法） */
 export function cnToNumber(input: string): number | null {
   const s = input.trim().replace(/,/g, '')
   if (!s) return null
   if (/^\d+(?:\.\d+)?$/.test(s)) return Number(s)
   if (s === '半') return 0.5
+  const CN_UNITS: Record<string, number> = { 十: 10, 百: 100, 千: 1000, 万: 10000 }
   let total = 0
   let current = 0
+  let lastUnit = 1
+  let sawZeroAfterUnit = false
   let touched = false
   for (const ch of s) {
-    if (ch === '十') {
-      total += (current === 0 ? 1 : current) * 10
-      current = 0
-      touched = true
-    } else if (ch === '百') {
-      total += (current === 0 ? 1 : current) * 100
+    const unit = CN_UNITS[ch]
+    if (unit !== undefined) {
+      total += (current === 0 ? 1 : current) * unit
+      lastUnit = unit
       current = 0
       touched = true
     } else if (CN_DIGITS[ch] !== undefined) {
+      // 「一百零二」里的零表示位次跳空，此时末位数字不能再按省略单位处理
+      if (CN_DIGITS[ch] === 0 && lastUnit > 1) sawZeroAfterUnit = true
       current = CN_DIGITS[ch]
       touched = true
     } else {
@@ -193,6 +196,8 @@ export function cnToNumber(input: string): number | null {
     }
   }
   if (!touched) return null
+  // 末尾省略单位：一百二 → 120、一万二 → 12000（末位按上一级的 1/10 计）
+  if (current !== 0 && lastUnit > 1 && !sawZeroAfterUnit) return total + current * (lastUnit / 10)
   return total + current
 }
 

@@ -1,0 +1,33 @@
+fix: 按优先级修复代码审查问题（critical/high）
+
+core/rules:
+- labor: 试用期窗口先按标点/期限词截断，避免「试用期 6 个月，合同期限 2 年」误判
+- dates: 「内」排除内容/内部/内网等词；「至/到」语义改为区间结束；仅明确起始日才作期限起点
+- offer: 归一化改 min-max，并列同分给同名次
+- text: cnToNumber 支持 千/万 与省略末位单位（一百二/一万二/一百零二）
+- injury/injury.v1/nda.v1/offer.v1/resignation.v1/service.v1/labor.v1/rent: 修正恒真/反向/正则与窗口误判
+- engine: 空 catch 改为告警并保留错误信息
+
+storage/desktop:
+- db: legacy IndexedDB 仅在确认搬运完成后清理
+- vault: unlock 接住 keychain 异常并可回退明文密钥
+- bridge: putRecord 校验 ok；keychainBridge.load 失败改为抛错
+
+ingest:
+- index/pdf: OCR/渲染失败回退纯文本并转 warning
+- docx: 校验码点、JSZip 读取失败转 warning
+- ocr: 渲染缩放不再突破像素上限
+
+ui/state:
+- router: safeDecode 处理非法编码
+- DocumentPage: 删除加确认、保留误报恢复入口
+- ImportPanel: OCR 就绪才启用
+- reminderNotifier/store: 补齐错误处理与依赖键
+
+scripts/ci:
+- electron main/ocr/vaultStore: 同源校验、per-key 串行队列、worker 超时与坏记录容错
+- build-green/dist/fetch-tessdata/publish-release/verify-artifacts/dedupe-releases: 校验目录、重试与产物校验
+- release.yml: 上传前校验产物、最小权限、取消时不发布
+- package.json: dist 系列改用 build:release
+
+tests: 新增 dedupe completeness 用例；全套 102+ 通过
